@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  ADMIN
+  TRANSLATOR
+}
+
+enum AccountStatus {
+  INVITED
+  ONBOARDING_IN_PROGRESS
+  SUBMITTED_FOR_REVIEW
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  EXPIRED
+}
+
+enum InviteStatus {
+  PENDING
+  REDEEMED
+  EXPIRED
+  CANCELLED
+}
+
+enum OnboardingStep {
+  PROFILE
+  DOCUMENTS
+  AGREEMENTS
+  CONFIRMATION
+}
+
+enum DocumentType {
+  EMPLOYEE_CONTRACT
+  SERVICES_CONFIDENTIALITY_AGREEMENT
+  TFN_DECLARATION
+  SUPERANNUATION_DETAILS
+  SUPER_FUND_CONSENT
+}
+
+enum DocumentStatus {
+  PENDING
+  UPLOADED
+  ACCEPTED
+  RESUBMISSION_REQUESTED
+  QUARANTINED
+}
+
+enum AuditAction {
+  INVITE_SENT
+  INVITE_REDEEMED
+  ONBOARDING_STEP_SAVED
+  ONBOARDING_SUBMITTED
+  REMINDER_EMAIL_SENT
+  USER_ACTIVATED
+  USER_DEACTIVATED
+  DOCUMENT_UPLOADED
+  DOCUMENT_ACCEPTED
+  DOCUMENT_VIEWED
+  DOCUMENT_DOWNLOADED
+  DOCUMENT_RESUBMISSION_REQUESTED
+  TIMESHEET_CREATED
+  TIMESHEET_SUBMITTED
+  TIMESHEET_APPROVED
+  TIMESHEET_REJECTED
+  TIMESHEET_REOPENED
+  CSV_EXPORTED
+  JOB_RUN_COMPLETED
+}
+
+enum TimesheetStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                 String                 @id @default(cuid())
+  clerkUserId        String                 @unique
+  email              String                 @unique
+  fullName           String?
+  preferredName      String?
+  role               AppRole
+  status             AccountStatus          @default(INVITED)
+  phone              String?
+  mailingAddress     String?
+  yearsOfExperience  Int?
+  certifications     String?
+  privacyAcceptedAt  DateTime?
+  isAdminMfaVerified Boolean                @default(false)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  languagePairs      UserLanguagePair[]
+  onboarding         OnboardingSubmission?
+  documents          Document[]
+  invitesSent        Invite[]               @relation("InvitedBy")
+  invites            Invite[]               @relation("InvitedUser")
+  timesheets         Timesheet[]
+  auditLogs          AuditLog[]             @relation("ActorAuditLogs")
+}
+
+model Invite {
+  id            String       @id @default(cuid())
+  email         String
+  tokenHash     String       @unique
+  status        InviteStatus @default(PENDING)
+  expiresAt     DateTime
+  redeemedAt    DateTime?
+  sentAt        DateTime     @default(now())
+  invitedById   String
+  invitedUserId String?
+  invitedBy     User         @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  invitedUser   User?        @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+}
+
+model OnboardingSubmission {
+  id                    String         @id @default(cuid())
+  userId                String         @unique
+  currentStep           OnboardingStep @default(PROFILE)
+  profileCompletedAt    DateTime?
+  documentsCompletedAt  DateTime?
+  agreementsCompletedAt DateTime?
+  submittedAt           DateTime?
+  signatureName         String?
+  signatureIp           String?
+  signatureTimestamp    DateTime?
+  docEmailFallback      Boolean        @default(false)
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id            String         @id @default(cuid())
+  userId        String
+  type          DocumentType
+  status        DocumentStatus @default(PENDING)
+  fileName      String?
+  mimeType      String?
+  sizeBytes     Int?
+  driveFileId   String?
+  driveFolderId String?
+  driveViewLink String?
+  adminComment  String?
+  uploadedAt    DateTime?
+  acceptedAt    DateTime?
+  requestedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessAudits  DocumentAccessAudit[]
+
+  @@unique([userId, type])
+}
+
+model DocumentAccessAudit {
+  id         String      @id @default(cuid())
+  documentId String
+  actorId    String
+  action     AuditAction
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+  document   Document    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id             String              @id @default(cuid())
+  name           String              @unique
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  timesheetItems TimesheetLineItem[]
+}
+
+model LanguagePair {
+  id        String             @id @default(cuid())
+  label     String             @unique
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  users     UserLanguagePair[]
+  items     TimesheetLineItem[]
+}
+
+model UserLanguagePair {
+  userId         String
+  languagePairId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  languagePair   LanguagePair @relation(fields: [languagePairId], references: [id], onDelete: Cascade)
+
+  @@id([userId, languagePairId])
+}
+
+model Timesheet {
+  id           String          @id @default(cuid())
+  userId       String
+  periodStart  DateTime
+  periodEnd    DateTime
+  status       TimesheetStatus @default(DRAFT)
+  adminComment String?
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  reopenedAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lineItems    TimesheetLineItem[]
+
+  @@index([userId, periodStart, periodEnd, status])
+}
+
+model TimesheetLineItem {
+  id             String       @id @default(cuid())
+  timesheetId    String
+  projectId      String
+  languagePairId String
+  hours          Decimal      @db.Decimal(6, 2)
+  note           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  timesheet      Timesheet    @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  languagePair   LanguagePair @relation(fields: [languagePairId], references: [id], onDelete: Restrict)
+}
+
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  targetUserId String?
+  action       AuditAction
+  entityType   String
+  entityId     String
+  detailsJson  String?
+  createdAt    DateTime @default(now())
+  actor        User?    @relation("ActorAuditLogs", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+}

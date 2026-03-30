@@ -1,0 +1,35 @@
+{
+  "name": "employee-management-system",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "node prisma/seed.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.17.0",
+    "@prisma/client": "^6.6.0",
+    "clsx": "^2.1.1",
+    "csv-stringify": "^6.5.2",
+    "googleapis": "^148.0.0",
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "svix": "^1.62.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "prisma": "^6.6.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}
