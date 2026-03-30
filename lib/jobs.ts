@@ -1,8 +1,9 @@
 import { AccountStatus, AuditAction } from "@prisma/client";
 
 import { logAudit } from "@/lib/audit";
+import { getPayPeriodStartDay } from "@/lib/config";
 import { prisma } from "@/lib/db";
-import { sendTransactionalEmail } from "@/lib/email";
+import { sendAdminNotification, sendTransactionalEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import { getPayPeriodRange } from "@/lib/periods";
 
@@ -39,6 +40,13 @@ export const runInviteExpiryJob = async () => {
     ]);
   }
 
+  if (expiredInvites.length > 0) {
+    await sendAdminNotification({
+      subject: "Courant onboarding invites expired",
+      html: `<p>${expiredInvites.length} onboarding invite(s) have expired and may need to be reissued.</p><p><a href="${env.appUrl}/admin">Open admin dashboard</a></p>`
+    });
+  }
+
   return { expiredInvites: expiredInvites.length };
 };
 
@@ -71,7 +79,7 @@ export const runOnboardingReminderJob = async () => {
 };
 
 export const runTimesheetReminderJob = async () => {
-  const currentPeriod = getPayPeriodRange(new Date(), env.defaultPayPeriodStartDay);
+  const currentPeriod = getPayPeriodRange(new Date(), await getPayPeriodStartDay());
   const activeUsers = await prisma.user.findMany({
     where: {
       role: "TRANSLATOR",

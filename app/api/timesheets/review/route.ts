@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
+import { sendTransactionalEmail } from "@/lib/email";
 import { reviewTimesheetSchema } from "@/lib/validators";
 
 export async function POST(request: Request) {
@@ -16,7 +17,10 @@ export async function POST(request: Request) {
   });
 
   const timesheet = await prisma.timesheet.findUnique({
-    where: { id: payload.timesheetId }
+    where: { id: payload.timesheetId },
+    include: {
+      user: true
+    }
   });
 
   if (!timesheet) {
@@ -51,6 +55,19 @@ export async function POST(request: Request) {
     entityType: "Timesheet",
     entityId: timesheet.id,
     details: { comment: payload.comment }
+  });
+
+  const subject =
+    payload.action === "approve"
+      ? "Your Courant timesheet was approved"
+      : payload.action === "reject"
+        ? "Your Courant timesheet needs revision"
+        : "Your Courant timesheet was reopened";
+
+  await sendTransactionalEmail({
+    to: timesheet.user.email,
+    subject,
+    html: `<p>Your timesheet for ${timesheet.periodStart.toISOString().slice(0, 10)} to ${timesheet.periodEnd.toISOString().slice(0, 10)} is now marked as ${nextState.status}.</p>${payload.comment ? `<p>Admin note: ${payload.comment}</p>` : ""}<p><a href="${new URL("/translator", request.url).toString()}">Open timesheets</a></p>`
   });
 
   return NextResponse.redirect(new URL("/admin", request.url));

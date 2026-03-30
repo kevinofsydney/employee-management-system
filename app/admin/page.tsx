@@ -2,10 +2,12 @@ import Link from "next/link";
 
 import { Badge, Card, PageShell } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
+import { getPayPeriodStartDay } from "@/lib/config";
 import { prisma } from "@/lib/db";
 
 export default async function AdminPage() {
   const admin = await requireAdmin();
+  const payPeriodStartDay = await getPayPeriodStartDay();
   const [users, pendingTimesheets] = await Promise.all([
     prisma.user.findMany({
       where: { role: "TRANSLATOR" },
@@ -49,6 +51,46 @@ export default async function AdminPage() {
         </form>
       </Card>
 
+      <div className="grid-auto">
+        <Card>
+          <h2 className="text-2xl font-semibold">Pay period settings</h2>
+          <form action="/api/config/pay-period" className="mt-4 flex flex-wrap items-end gap-3" method="post">
+            <div className="field">
+              <label htmlFor="startDay">Weekly start day</label>
+              <select defaultValue={String(payPeriodStartDay)} id="startDay" name="startDay">
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+            </div>
+            <button className="button secondary" type="submit">
+              Save setting
+            </button>
+          </form>
+        </Card>
+
+        <Card>
+          <h2 className="text-2xl font-semibold">Export approved CSV</h2>
+          <form action="/api/export" className="mt-4 flex flex-wrap items-end gap-3" method="get">
+            <div className="field">
+              <label htmlFor="from">From</label>
+              <input id="from" name="from" type="date" />
+            </div>
+            <div className="field">
+              <label htmlFor="to">To</label>
+              <input id="to" name="to" type="date" />
+            </div>
+            <button className="button secondary" type="submit">
+              Download CSV
+            </button>
+          </form>
+        </Card>
+      </div>
+
       <Card>
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-2xl font-semibold">Translator records</h2>
@@ -76,7 +118,10 @@ export default async function AdminPage() {
                     {user.status.replaceAll("_", " ")}
                   </Badge>
                 </td>
-                <td>{user.onboarding?.submittedAt ? "Submitted" : user.onboarding?.currentStep ?? "Not started"}</td>
+                <td>
+                  {user.onboarding?.submittedAt ? "Submitted" : user.onboarding?.currentStep ?? "Not started"}
+                  {user.onboarding?.docEmailFallback ? <div className="mt-1 text-sm text-amber-700">Docs declared emailed</div> : null}
+                </td>
                 <td>{user.timesheets[0]?.periodEnd.toISOString().slice(0, 10) ?? "None yet"}</td>
                 <td>{user.documents.filter((doc: (typeof user.documents)[number]) => doc.status === "UPLOADED" || doc.status === "ACCEPTED").length}</td>
                 <td>
@@ -129,9 +174,14 @@ export default async function AdminPage() {
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {document.driveFileId ? (
-                          <Link className="button secondary" href={`/api/documents/access?documentId=${document.id}&mode=view`}>
-                            View in Drive
-                          </Link>
+                          <>
+                            <Link className="button secondary" href={`/documents/${document.id}`}>
+                              View in app
+                            </Link>
+                            <Link className="button secondary" href={`/api/documents/access?documentId=${document.id}&mode=view`}>
+                              Open in Drive
+                            </Link>
+                          </>
                         ) : null}
                         <form action="/api/documents/review" className="flex flex-wrap gap-2" method="post">
                           <input name="documentId" type="hidden" value={document.id} />

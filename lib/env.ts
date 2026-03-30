@@ -21,5 +21,8 @@ export const env = {
     process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, "\n")
   ),
   clerkWebhookSecret: process.env.CLERK_WEBHOOK_SECRET,
-  jobRunnerSecret: process.env.JOB_RUNNER_SECRET
+  jobRunnerSecret: process.env.JOB_RUNNER_SECRET,
+  malwareScanApiUrl: process.env.MALWARE_SCAN_API_URL,
+  malwareScanApiKey: process.env.MALWARE_SCAN_API_KEY,
+  malwareScanFailClosed: process.env.MALWARE_SCAN_FAIL_CLOSED === "true"
 };

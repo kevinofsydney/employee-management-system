@@ -1,3 +1,6 @@
+import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
+
 export const sendTransactionalEmail = async ({
   to,
   subject,
@@ -31,4 +34,38 @@ export const sendTransactionalEmail = async ({
   }
 
   return response.json();
+};
+
+export const sendAdminNotification = async ({
+  subject,
+  html
+}: {
+  subject: string;
+  html: string;
+}) => {
+  const adminUsers = await prisma.user.findMany({
+    where: {
+      role: "ADMIN"
+    },
+    select: {
+      email: true
+    }
+  });
+
+  const recipients = Array.from(
+    new Set([
+      ...env.adminEmails,
+      ...adminUsers.map((user) => user.email.toLowerCase())
+    ])
+  );
+
+  await Promise.all(
+    recipients.map((email) =>
+      sendTransactionalEmail({
+        to: email,
+        subject,
+        html
+      })
+    )
+  );
 };

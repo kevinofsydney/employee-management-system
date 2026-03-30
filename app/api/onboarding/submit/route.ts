@@ -4,6 +4,7 @@ import { requireAppUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { requiredDocumentTypes } from "@/lib/documents";
+import { sendAdminNotification } from "@/lib/email";
 
 export async function POST(request: Request) {
   const user = await requireAppUser();
@@ -49,6 +50,11 @@ export async function POST(request: Request) {
     action: "ONBOARDING_SUBMITTED",
     entityType: "OnboardingSubmission",
     entityId: user.id
+  });
+
+  await sendAdminNotification({
+    subject: "Translator onboarding submitted for review",
+    html: `<p>${user.fullName ?? user.email} has submitted onboarding for review.</p><p><a href="${new URL("/admin", request.url).toString()}">Open admin dashboard</a></p>`
   });
 
   return NextResponse.redirect(new URL("/translator", request.url));

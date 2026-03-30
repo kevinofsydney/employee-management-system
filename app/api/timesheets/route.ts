@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAppUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
+import { sendAdminNotification, sendTransactionalEmail } from "@/lib/email";
 import { submitTimesheetSchema } from "@/lib/validators";
 
 export async function POST(request: Request) {
@@ -98,6 +99,24 @@ export async function POST(request: Request) {
       totalHours: payload.items.reduce((sum, item) => sum + item.hours, 0)
     }
   });
+
+  const totalHours = payload.items.reduce((sum, item) => sum + item.hours, 0);
+
+  await Promise.all([
+    sendTransactionalEmail({
+      to: user.email,
+      subject: "Your Courant timesheet was received",
+      html: `<p>Your timesheet for ${periodStart.toISOString().slice(0, 10)} to ${periodEnd.toISOString().slice(0, 10)} has been ${payload.mode === "submit" ? "submitted" : "saved as a draft"}.</p>`
+    }),
+    ...(payload.mode === "submit"
+      ? [
+          sendAdminNotification({
+            subject: "New timesheet submitted",
+            html: `<p>${user.fullName ?? user.email} submitted a timesheet totaling ${totalHours.toFixed(2)} hours.</p><p><a href="${new URL("/admin", request.url).toString()}">Open review queue</a></p>`
+          })
+        ]
+      : [])
+  ]);
 
   return NextResponse.redirect(new URL("/translator", request.url));
 }

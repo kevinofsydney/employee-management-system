@@ -1,5 +1,7 @@
 import { DocumentType } from "@prisma/client";
 
+import { env } from "@/lib/env";
+
 const allowedMimeTypes = ["application/pdf", "image/png", "image/jpeg"];
 const allowedExtensions = [".pdf", ".png", ".jpg", ".jpeg"];
 const maxFileBytes = 10 * 1024 * 1024;
@@ -33,6 +35,43 @@ export const validateDocumentUpload = (file: File) => {
   }
 };
 
-export const scanFile = async (_bytes: Buffer) => {
-  return { clean: true as const };
+export const scanFile = async (bytes: Buffer) => {
+  if (!env.malwareScanApiUrl) {
+    return { clean: true as const, source: "stub" as const };
+  }
+
+  try {
+    const response = await fetch(env.malwareScanApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        ...(env.malwareScanApiKey ? { Authorization: `Bearer ${env.malwareScanApiKey}` } : {})
+      },
+      body: new Uint8Array(bytes)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Malware scan request failed with status ${response.status}.`);
+    }
+
+    const result = (await response.json()) as { clean?: boolean; threat?: string };
+    return {
+      clean: Boolean(result.clean),
+      threat: result.threat,
+      source: "api" as const
+    };
+  } catch (error) {
+    if (env.malwareScanFailClosed) {
+      return {
+        clean: false as const,
+        threat: error instanceof Error ? error.message : "Unknown malware scan failure",
+        source: "api-fail-closed" as const
+      };
+    }
+
+    return {
+      clean: true as const,
+      source: "api-fail-open" as const
+    };
+  }
 };

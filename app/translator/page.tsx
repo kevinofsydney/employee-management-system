@@ -1,12 +1,15 @@
 import { Badge, Card, PageShell } from "@/components/ui";
 import { TimesheetForm } from "@/components/timesheet-form";
 import { requireAppUser } from "@/lib/auth";
+import { getPayPeriodStartDay } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { documentLabels, requiredDocumentTypes } from "@/lib/documents";
 import { getPayPeriodRange } from "@/lib/periods";
+import Link from "next/link";
 
 export default async function TranslatorPage() {
   const user = await requireAppUser();
+  const payPeriodStartDay = await getPayPeriodStartDay();
   const [documents, timesheets, projects, languagePairs] = await Promise.all([
     prisma.document.findMany({
       where: { userId: user.id },
@@ -35,7 +38,8 @@ export default async function TranslatorPage() {
   ]);
 
   const configuredLanguagePairs = user.languagePairs.map((entry: (typeof user.languagePairs)[number]) => entry.languagePair);
-  const currentPeriod = getPayPeriodRange(new Date());
+  const currentPeriod = getPayPeriodRange(new Date(), payPeriodStartDay);
+  const onboarding = user.onboarding;
   const editableTimesheet = timesheets.find(
     (timesheet: (typeof timesheets)[number]) =>
       timesheet.periodStart.toISOString() === currentPeriod.start.toISOString() &&
@@ -150,11 +154,29 @@ export default async function TranslatorPage() {
                   <button className="button secondary" type="submit">
                     Upload
                   </button>
+                  {document?.driveFileId ? (
+                    <Link className="button secondary" href={`/documents/${document.id}`}>
+                      View in app
+                    </Link>
+                  ) : null}
                 </div>
               </form>
             );
           })}
         </div>
+        <Card className="mt-6 border-dashed bg-amber-50">
+          <h3 className="text-lg font-semibold">Drive fallback</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            If Google Drive upload is temporarily unavailable, declare that you emailed the required documents to Kevin or David so onboarding can still proceed for review.
+          </p>
+          <form action="/api/documents/fallback" className="mt-4 flex flex-wrap items-center gap-3" method="post">
+            <input name="declared" type="hidden" value={onboarding?.docEmailFallback ? "false" : "true"} />
+            <button className="button secondary" type="submit">
+              {onboarding?.docEmailFallback ? "Clear emailed-documents declaration" : "Declare documents emailed"}
+            </button>
+            {onboarding?.docEmailFallback ? <Badge tone="warning">Documents declared emailed</Badge> : null}
+          </form>
+        </Card>
         <form action="/api/onboarding/agreements" className="mt-6 grid gap-4" method="post">
           <div className="field">
             <label htmlFor="signatureName">Signature name</label>
