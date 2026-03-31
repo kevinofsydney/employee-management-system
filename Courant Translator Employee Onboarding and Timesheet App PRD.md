@@ -267,3 +267,124 @@ Implement these events for measuring success and debugging:
 * Responsive design QA, bug fixes, accessibility pass
 * Soft launch with full translator pool
 * **Depends on:** Phases 1–3 complete, email templates approved by Kevin/David
+---
+
+## Implementation Delta - March 31, 2026
+
+This section records the decisions and implementation changes made after the original PRD so the product spec stays aligned with the working codebase.
+
+### Architecture Decisions We Changed
+
+* **Auth provider is now Clerk.**
+  Why: the app should not roll custom auth or password reset flows. Clerk handles passwordless magic-link login, session management, and identity verification with less long-term auth maintenance risk.
+
+* **Document storage remains Google Drive primary, not S3/object storage.**
+  Why: the business explicitly does not want a new admin/storage vendor if avoidable, and admins need to view PDFs outside the app. The implementation therefore uses a dedicated Google Shared Drive plus an app-owned Drive service layer.
+
+* **Authorization stays in the app database, not in Drive permissions.**
+  Why: Drive is the file store, but access control needs to remain app-enforced so translators cannot browse raw Drive content and every access can be audited.
+
+* **Weekly pay period is configurable in admin settings.**
+  Why: the original PRD called out that the exact week boundary was still undecided. The implementation moved this into app config instead of hard-coding it.
+
+### Functional Additions Made During Implementation
+
+* **Admin-configurable pay-period start day** was added.
+  Why: avoids code changes if Kevin/David finalize a different weekly cycle.
+
+* **Date-range CSV export** was added instead of always exporting all approved timesheets.
+  Why: the PRD already described date-range export as the admin workflow.
+
+* **Timesheets now support multiple line items in one submission** with a running total.
+  Why: this matches the original functional requirements more accurately than a single-line-only submission flow.
+
+* **Timesheet drafts and resubmission flow** were implemented for the current pay period.
+  Why: the PRD requires draft/edit/resubmit behavior, especially after rejection or reopening.
+
+* **Admin reopening of timesheets** remains supported through the review route.
+  Why: this is required for the duplicate guard and correction workflow.
+
+* **In-app document viewing** was added in addition to opening files in Drive.
+  Why: admins and translators benefit from staying in the app for review, while still retaining the ability to open PDFs directly in Drive when needed.
+
+* **Manual "documents emailed" fallback** was added to onboarding.
+  Why: the PRD specified that onboarding must still progress if Google Drive upload/integration fails and the translator declares the documents were emailed instead.
+
+* **Seed data support** was added for projects, language pairs, pay-period config, and admin records.
+  Why: this reduces setup friction and makes local/initial environments usable faster.
+
+* **Protected job runner endpoint** was added for invite expiry and reminder processing.
+  Why: reminder and expiry logic needs a schedulable execution path instead of being left as a future idea.
+
+### Security Hardening Added Beyond the Original Baseline
+
+* **Document access goes through app authorization before Drive links are resolved.**
+  Why: reduces the chance of raw shared links becoming the real permission model.
+
+* **Audit logging was extended** to cover invites, onboarding submission, document upload/view/download, document resubmission, timesheet actions, CSV export, reminders, and job runs.
+  Why: sensitive employee/tax workflows need traceability.
+
+* **Malware scanning is now a pluggable integration point** using environment configuration.
+  Why: the app needs a real quarantine/scanning path before production, but the actual vendor/service can vary.
+
+* **Optional fail-closed malware scanning mode** was added.
+  Why: some environments may prefer to quarantine uploads if the scanning service is down instead of allowing them through.
+
+* **Email notifications now cover key workflow events** such as onboarding submission, timesheet submission, approval/rejection, activation/deactivation, and document resubmission.
+  Why: the PRD requires proactive notifications so Kevin and David do not need to poll the dashboard.
+
+### Product/Model Clarifications We Standardized
+
+* **Document types were normalized to AU onboarding documents**:
+  * Employee contract
+  * Services confidentiality agreement
+  * TFN declaration
+  * Superannuation details
+  * Super fund consent
+  
+  Why: the original data model examples contained inconsistent US-centric values like W-9/W-8BEN/government ID that did not match the stated Australian onboarding scope.
+
+* **User lifecycle states were formalized** as invited/onboarding/submitted-for-review/active/inactive/archived/expired.
+  Why: role and lifecycle should be separate concerns, and admin activation is a real business gate.
+
+* **Google Drive is treated as a records vault, not a user-facing shared workspace.**
+  Why: this keeps the operational workflow aligned with the security posture.
+
+## Outstanding Work
+
+The codebase has moved well beyond a blank scaffold, but these items are still outstanding before production use:
+
+### Environment and Deployment
+
+* Create and populate a real `.env` with Clerk, Postgres, Google Drive, email, job secret, and optional malware scan values.
+* Run the first real Prisma migration against the actual Postgres database.
+* Seed the database in the target environment.
+* Set up a deployment target and scheduled execution for the reminder/expiry job runner.
+
+### Security and Compliance
+
+* Connect a real malware scanning/quarantine service to the scan hook.
+* Decide whether scanning should run fail-open or fail-closed in production.
+* Validate Google Shared Drive permissions, service account access, and admin MFA policy in the real Workspace tenant.
+* Finalize retention/deletion policy for inactive/archived translator records and uploaded documents.
+* Add a fuller privacy notice/legal copy review for AU employee/tax document handling.
+
+### Product Gaps Still Not Fully Implemented
+
+* Auto-save on blur for onboarding fields is not yet fully implemented.
+* Reminder timing is implemented via a protected job endpoint, but not yet connected to an actual scheduler.
+* Payroll CSV format still needs Kevin/David's exact spreadsheet column definition if the default export shape is not sufficient.
+* The onboarding agreements flow currently captures consent/signature metadata, but signed document rendering/storage should still be reviewed for legal defensibility.
+* Translator-side document preview still relies on Drive-backed rendering rather than a fully app-proxied private document streaming layer.
+
+### QA / Verification
+
+* Run full runtime verification with real credentials and services.
+* Run end-to-end onboarding and timesheet tests with test users.
+* Validate mobile behavior, accessibility, and Google Drive preview behavior in target browsers.
+* Re-run dependency/security review immediately before launch.
+
+### Ops / Monitoring
+
+* Add real monitoring/alerting for failed uploads, failed emails, failed job runs, and repeated auth failures.
+* Add an explicit launch checklist for Kevin/David covering admin account setup, MFA, Drive access, and support workflow.
