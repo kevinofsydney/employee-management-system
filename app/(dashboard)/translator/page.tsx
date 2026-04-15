@@ -60,14 +60,14 @@ export default async function TranslatorPage() {
     >
       <div className="grid-auto">
         <Card>
-          <h2 className="text-xl font-semibold">Account status</h2>
-          <p className="mt-3 text-sm text-slate-600">Your role is locked to your Courant translator record.</p>
+          <h2 className="card-title">Account status</h2>
+          <p className="card-description" style={{ marginTop: "0.75rem" }}>Your role is locked to your Courant translator record.</p>
           <div className="mt-4">
             <Badge tone={user.status === "ACTIVE" ? "success" : "warning"}>{user.status.replaceAll("_", " ")}</Badge>
           </div>
         </Card>
         <Card>
-          <h2 className="text-xl font-semibold">Onboarding progress</h2>
+          <h2 className="card-title">Onboarding progress</h2>
           <div className="mt-4">
             <ProgressBar steps={progressSteps} />
           </div>
@@ -75,8 +75,8 @@ export default async function TranslatorPage() {
       </div>
 
       <Card>
-        <h2 className="text-2xl font-semibold">Step 1: Profile details</h2>
-        <form action="/api/onboarding/profile" className="mt-5 grid gap-4" method="post">
+        <h2 className="card-title">Step 1: Profile details</h2>
+        <form action="/api/onboarding/profile" className="mt-5 space-y-4" method="post">
           <div className="grid-auto">
             <div className="field">
               <label htmlFor="fullName">Full legal name</label>
@@ -121,7 +121,7 @@ export default async function TranslatorPage() {
             <label>Language pairs</label>
             <div className="grid-auto">
               {languagePairs.map((languagePair) => (
-                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" key={languagePair.id}>
+                <label className="card flex-start" style={{ padding: "0.75rem 1rem", background: "rgba(255, 255, 255, 0.02)", cursor: "pointer" }} key={languagePair.id}>
                   <input
                     defaultChecked={configuredLanguagePairs.some((entry) => entry.id === languagePair.id)}
                     name="languagePairIds"
@@ -133,7 +133,7 @@ export default async function TranslatorPage() {
               ))}
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex-start" style={{ fontSize: "0.9rem", color: "var(--text-muted)", cursor: "pointer" }}>
             <input defaultChecked={Boolean(user.privacyAcceptedAt)} name="privacyAccepted" type="checkbox" />
             I have read the privacy notice and consent to secure handling of my onboarding data.
           </label>
@@ -144,29 +144,30 @@ export default async function TranslatorPage() {
       </Card>
 
       <Card>
-        <h2 className="text-2xl font-semibold">Step 2: Document uploads</h2>
+        <h2 className="card-title">Step 2: Document uploads</h2>
         <div className="mt-5 grid-auto">
           {requiredDocumentTypes.map((type) => {
             const document = documentMap.get(type);
             return (
               <form
                 action="/api/documents"
-                className="rounded-2xl border border-slate-200 p-4"
+                className="card"
+                style={{ padding: "1.25rem" }}
                 encType="multipart/form-data"
                 key={type}
                 method="post"
               >
                 <input name="type" type="hidden" value={type} />
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex-between">
                   <strong>{documentLabels[type]}</strong>
                   <Badge tone={document?.status === "ACCEPTED" ? "success" : document?.status === "UPLOADED" ? "default" : "warning"}>
                     {document?.status?.replaceAll("_", " ") ?? "pending"}
                   </Badge>
                 </div>
                 {document?.adminComment ? (
-                  <p className="mt-3 text-sm text-rose-700">Admin note: {document.adminComment}</p>
+                  <p style={{ marginTop: "0.75rem", fontSize: "0.9rem", color: "var(--danger-color)" }}>Admin note: {document.adminComment}</p>
                 ) : null}
-                <div className="mt-4 flex flex-wrap gap-3">
+                <div className="flex-start mt-4">
                   <input accept=".pdf,.png,.jpg,.jpeg,.docx" name="file" required type="file" />
                   <button className="button secondary" type="submit">
                     Upload
@@ -181,12 +182,12 @@ export default async function TranslatorPage() {
             );
           })}
         </div>
-        <Card className="mt-6 border-dashed bg-amber-50">
-          <h3 className="text-lg font-semibold">Drive fallback</h3>
-          <p className="mt-2 text-sm text-slate-700">
+        <Card className="mt-5" style={{ background: "var(--warning-bg)", border: "1px dashed var(--warning-color)" }}>
+          <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>Drive fallback</h3>
+          <p className="card-description" style={{ marginTop: "0.5rem" }}>
             If Google Drive upload is temporarily unavailable, declare that you emailed the required documents to Kevin or David so onboarding can still proceed for review.
           </p>
-          <form action="/api/documents/fallback" className="mt-4 flex flex-wrap items-center gap-3" method="post">
+          <form action="/api/documents/fallback" className="flex-start mt-4" method="post">
             <input name="declared" type="hidden" value={onboarding?.docEmailFallback ? "false" : "true"} />
             <button className="button secondary" type="submit">
               {onboarding?.docEmailFallback ? "Clear emailed-documents declaration" : "Declare documents emailed"}
@@ -197,16 +198,16 @@ export default async function TranslatorPage() {
       </Card>
 
       <Card>
-        <h2 className="text-2xl font-semibold">Step 3: Consent & declarations</h2>
-        <form action="/api/onboarding/agreements" className="mt-5 grid gap-4" method="post">
+        <h2 className="card-title">Step 3: Consent & declarations</h2>
+        <form action="/api/onboarding/agreements" className="mt-5 space-y-4" method="post">
           <div className="field">
             <label htmlFor="signatureName">Signature (type your full legal name)</label>
             <input defaultValue={user.fullName ?? ""} id="signatureName" name="signatureName" required />
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex-start" style={{ fontSize: "0.9rem", color: "var(--text-muted)", cursor: "pointer" }}>
             <input name="consentGiven" required type="checkbox" /> I agree to the contractor agreement and confidentiality terms.
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex-start" style={{ fontSize: "0.9rem", color: "var(--text-muted)", cursor: "pointer" }}>
             <input required type="checkbox" /> I confirm all information provided is accurate and complete.
           </label>
           <button className="button secondary" type="submit">
@@ -223,7 +224,7 @@ export default async function TranslatorPage() {
       {user.status === "ACTIVE" && (
         <>
           <Card>
-            <h2 className="text-2xl font-semibold">Submit timesheet entry</h2>
+            <h2 className="card-title">Submit timesheet entry</h2>
             <TimesheetForm
               action="/api/timesheets"
               disabled={user.status !== "ACTIVE"}
@@ -232,7 +233,7 @@ export default async function TranslatorPage() {
           </Card>
 
           <Card>
-            <h2 className="text-2xl font-semibold">Timesheet history</h2>
+            <h2 className="card-title">Timesheet history</h2>
             <table className="table mt-5">
               <thead>
                 <tr>
@@ -256,7 +257,7 @@ export default async function TranslatorPage() {
                       <Badge tone={entry.status === "APPROVED" ? "success" : entry.status === "REJECTED" ? "danger" : "default"}>
                         {entry.status}
                       </Badge>
-                      {entry.adminComment ? <div className="mt-1 text-sm text-rose-700">{entry.adminComment}</div> : null}
+                      {entry.adminComment ? <div style={{ marginTop: "0.25rem", fontSize: "0.85rem", color: "var(--danger-color)" }}>{entry.adminComment}</div> : null}
                     </td>
                   </tr>
                 ))}

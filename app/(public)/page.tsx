@@ -11,19 +11,19 @@ export default function HomePage() {
     >
       <div className="grid-auto">
         <Card>
-          <h2 className="text-2xl font-semibold">Translator flow</h2>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
+          <h2 className="card-title">Translator flow</h2>
+          <p className="card-description" style={{ marginTop: "0.75rem" }}>
             Complete onboarding, upload AU payroll documents, sign agreements, and submit weekly timesheets once activated.
           </p>
         </Card>
         <Card>
-          <h2 className="text-2xl font-semibold">Admin controls</h2>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
+          <h2 className="card-title">Admin controls</h2>
+          <p className="card-description" style={{ marginTop: "0.75rem" }}>
             Invite translators, review documents, approve timesheets, export payroll CSVs, and audit every sensitive action.
           </p>
         </Card>
       </div>
-      <div className="flex flex-wrap gap-4">
+      <div className="flex-start" style={{ flexWrap: "wrap" }}>
         <SignedOut>
           <Link className="button" href="/sign-in">
             Sign in

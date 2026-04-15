@@ -70,20 +70,20 @@ export default async function AdminPage() {
       {/* Notification inbox */}
       {notifications.length > 0 && (
         <Card>
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold">Notifications ({notifications.length})</h2>
+          <div className="flex-between">
+            <h2 className="card-title">Notifications ({notifications.length})</h2>
             <form action="/api/notifications" method="post">
               <input name="notificationId" type="hidden" value="all" />
               <button className="button secondary" type="submit">Mark all read</button>
             </form>
           </div>
-          <ul className="mt-4 space-y-2">
+          <ul className="mt-4 space-y-3">
             {notifications.map((n) => (
-              <li className="flex items-start justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm" key={n.id}>
+              <li className="card flex-between" style={{ padding: "1rem" }} key={n.id}>
                 <div>
-                  <p className="font-semibold">{n.title}</p>
-                  <p className="text-slate-600">{n.message}</p>
-                  <p className="mt-1 text-xs text-slate-400">{n.createdAt.toISOString().slice(0, 16).replace("T", " ")}</p>
+                  <p style={{ fontWeight: 600 }}>{n.title}</p>
+                  <p className="card-description">{n.message}</p>
+                  <p className="card-description" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>{n.createdAt.toISOString().slice(0, 16).replace("T", " ")}</p>
                 </div>
                 {n.link && <Link className="button secondary" href={n.link}>View</Link>}
               </li>
@@ -95,18 +95,18 @@ export default async function AdminPage() {
       {/* Invite + Create user */}
       <div className="grid-auto">
         <Card>
-          <h2 className="text-2xl font-semibold">Invite translator</h2>
-          <form action="/api/invites" className="mt-4 flex flex-wrap gap-3" method="post">
-            <input className="min-w-[280px] rounded-full border border-slate-300 px-4 py-3" name="email" placeholder="translator@example.com" required type="email" />
+          <h2 className="card-title">Invite translator</h2>
+          <form action="/api/invites" className="flex-start mt-4" method="post">
+            <input className="single-input" name="email" placeholder="translator@example.com" required type="email" style={{ minWidth: "280px" }} />
             <button className="button" type="submit">Send invite</button>
           </form>
         </Card>
         <Card>
-          <h2 className="text-2xl font-semibold">Create translator manually</h2>
-          <form action="/api/users" className="mt-4 grid gap-3" method="post">
+          <h2 className="card-title">Create translator manually</h2>
+          <form action="/api/users" className="mt-4 space-y-3" method="post">
             <div className="grid-auto">
-              <input className="rounded-full border border-slate-300 px-4 py-3" name="email" placeholder="Email" required type="email" />
-              <input className="rounded-full border border-slate-300 px-4 py-3" name="fullName" placeholder="Full legal name" required />
+              <input className="single-input" name="email" placeholder="Email" required type="email" />
+              <input className="single-input" name="fullName" placeholder="Full legal name" required />
             </div>
             <button className="button secondary" type="submit">Create account</button>
           </form>
@@ -115,8 +115,8 @@ export default async function AdminPage() {
 
       {/* Event management */}
       <Card>
-        <h2 className="text-2xl font-semibold">Event management</h2>
-        <form action="/api/events" className="mt-4 flex flex-wrap items-end gap-3" method="post">
+        <h2 className="card-title">Event management</h2>
+        <form action="/api/events" className="flex-start mt-4" style={{ flexWrap: "wrap", alignItems: "flex-end" }} method="post">
           <div className="field">
             <label htmlFor="eventName">Event name</label>
             <input id="eventName" name="name" required />
@@ -165,8 +165,8 @@ export default async function AdminPage() {
 
       {/* Rate configuration */}
       <Card>
-        <h2 className="text-2xl font-semibold">Rate configuration</h2>
-        <form action="/api/rates" className="mt-4 flex flex-wrap items-end gap-3" method="post">
+        <h2 className="card-title">Rate configuration</h2>
+        <form action="/api/rates" className="flex-start mt-4" style={{ flexWrap: "wrap", alignItems: "flex-end" }} method="post">
           <div className="field">
             <label htmlFor="rateType">Rate type</label>
             <select id="rateType" name="rateType">
@@ -182,10 +182,10 @@ export default async function AdminPage() {
           </div>
           <button className="button secondary" type="submit">Save rate</button>
         </form>
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className="flex-start mt-4" style={{ flexWrap: "wrap" }}>
           {rates.map((r) => (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm" key={r.id}>
-              <span className="font-semibold">{r.rateType.replaceAll("_", " ")}:</span> ${Number(r.amount).toFixed(2)}/hr
+            <div className="card" style={{ padding: "0.5rem 1rem", fontSize: "0.9rem" }} key={r.id}>
+              <span style={{ fontWeight: 600 }}>{r.rateType.replaceAll("_", " ")}:</span> ${Number(r.amount).toFixed(2)}/hr
             </div>
           ))}
         </div>
@@ -194,8 +194,8 @@ export default async function AdminPage() {
       {/* Exports */}
       <div className="grid-auto">
         <Card>
-          <h2 className="text-2xl font-semibold">MYOB timesheet export</h2>
-          <form action="/api/export" className="mt-4 flex flex-wrap items-end gap-3" method="get">
+          <h2 className="card-title">MYOB timesheet export</h2>
+          <form action="/api/export" className="flex-start mt-4" style={{ flexWrap: "wrap", alignItems: "flex-end" }} method="get">
             <div className="field">
               <label htmlFor="from">From</label>
               <input id="from" name="from" type="date" />
@@ -208,14 +208,14 @@ export default async function AdminPage() {
           </form>
         </Card>
         <Card>
-          <h2 className="text-2xl font-semibold">Translator profiles export</h2>
-          <Link className="button secondary mt-4 inline-block" href="/api/export/users">Download profiles CSV</Link>
+          <h2 className="card-title">Translator profiles export</h2>
+          <Link className="button secondary mt-4" style={{ display: "inline-block" }} href="/api/export/users">Download profiles CSV</Link>
         </Card>
       </div>
 
       {/* Translator records */}
       <Card>
-        <h2 className="text-2xl font-semibold">Translator records</h2>
+        <h2 className="card-title">Translator records</h2>
         <table className="table mt-5">
           <thead>
             <tr>
@@ -241,17 +241,17 @@ export default async function AdminPage() {
                     </Badge>
                   </td>
                   <td>{user.city ?? "-"}</td>
-                  <td className="text-xs">{user.languagePairs.map((lp) => lp.languagePair.label).join(", ") || "-"}</td>
+                  <td style={{ fontSize: "0.85rem" }}>{user.languagePairs.map((lp) => lp.languagePair.label).join(", ") || "-"}</td>
                   <td>
                     {user.onboarding?.submittedAt ? "Submitted" : user.onboarding?.currentStep ?? "Not started"}
-                    {user.onboarding?.docEmailFallback ? <div className="mt-1 text-sm text-amber-700">Docs declared emailed</div> : null}
+                    {user.onboarding?.docEmailFallback ? <div style={{ marginTop: "0.25rem", fontSize: "0.85rem", color: "var(--warning-color)" }}>Docs declared emailed</div> : null}
                   </td>
                   <td>{user.timesheetEntries[0]?.date.toISOString().slice(0, 10) ?? "None"}</td>
-                  <td className="text-xs">
+                  <td style={{ fontSize: "0.85rem" }}>
                     {earnings ? `${earnings.totalHours.toFixed(1)}h / $${earnings.totalEarnings.toFixed(2)}` : "-"}
                   </td>
                   <td>
-                    <form action="/api/users/status" className="flex flex-wrap gap-2" method="post">
+                    <form action="/api/users/status" className="flex-start" style={{ flexWrap: "wrap" }} method="post">
                       <input name="userId" type="hidden" value={user.id} />
                       <button className="button secondary" name="status" type="submit" value="ACTIVE">Activate</button>
                       <button className="button secondary" name="status" type="submit" value="INACTIVE">Deactivate</button>
@@ -266,23 +266,23 @@ export default async function AdminPage() {
 
       {/* Document review */}
       <Card>
-        <h2 className="text-2xl font-semibold">Document review</h2>
+        <h2 className="card-title">Document review</h2>
         <div className="mt-5 space-y-4">
           {users
             .filter((user) => user.documents.length > 0)
             .map((user) => (
-              <div className="rounded-2xl border border-slate-200 p-4" key={`documents-${user.id}`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="card" style={{ padding: "1.25rem" }} key={`documents-${user.id}`}>
+                <div className="flex-between">
                   <strong>{user.fullName ?? user.email}</strong>
                   <Badge tone={user.status === "ACTIVE" ? "success" : "default"}>{user.status.replaceAll("_", " ")}</Badge>
                 </div>
                 <div className="mt-4 space-y-3">
                   {user.documents.map((document) => (
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4" key={document.id}>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="card" style={{ padding: "1rem", background: "rgba(255, 255, 255, 0.02)" }} key={document.id}>
+                      <div className="flex-between">
                         <div>
-                          <p className="font-semibold">{document.type.replaceAll("_", " ")}</p>
-                          <p className="text-sm text-slate-600">{document.fileName ?? "No uploaded file yet"}</p>
+                          <p style={{ fontWeight: 600 }}>{document.type.replaceAll("_", " ")}</p>
+                          <p className="card-description">{document.fileName ?? "No uploaded file yet"}</p>
                         </div>
                         <Badge
                           tone={
@@ -294,21 +294,21 @@ export default async function AdminPage() {
                           {document.status.replaceAll("_", " ")}
                         </Badge>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="flex-start mt-4" style={{ flexWrap: "wrap" }}>
                         {document.driveFileId ? (
                           <>
                             <Link className="button secondary" href={`/documents/${document.id}`}>View in app</Link>
                             <Link className="button secondary" href={`/api/documents/access?documentId=${document.id}&mode=view`}>Open in Drive</Link>
                           </>
                         ) : null}
-                        <form action="/api/documents/review" className="flex flex-wrap gap-2" method="post">
+                        <form action="/api/documents/review" className="flex-start" style={{ flexWrap: "wrap" }} method="post">
                           <input name="documentId" type="hidden" value={document.id} />
                           <button className="button secondary" name="action" type="submit" value="accept">Accept</button>
-                          <input className="rounded-full border border-slate-300 px-4 py-2" name="comment" placeholder="Reason for resubmission" />
+                          <input className="single-input" name="comment" placeholder="Reason for resubmission" />
                           <button className="button secondary" name="action" type="submit" value="resubmit">Request resubmission</button>
                         </form>
                       </div>
-                      {document.adminComment ? <p className="mt-3 text-sm text-rose-700">Comment: {document.adminComment}</p> : null}
+                      {document.adminComment ? <p style={{ marginTop: "0.75rem", fontSize: "0.9rem", color: "var(--danger-color)" }}>Comment: {document.adminComment}</p> : null}
                     </div>
                   ))}
                 </div>
@@ -319,35 +319,35 @@ export default async function AdminPage() {
 
       {/* Pending timesheet entries */}
       <Card>
-        <h2 className="text-2xl font-semibold">Pending timesheet entries</h2>
+        <h2 className="card-title">Pending timesheet entries</h2>
         <div className="mt-5 space-y-4">
           {pendingEntries.map((entry) => (
-            <div className="rounded-2xl border border-slate-200 p-4" key={entry.id}>
-              <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="card" style={{ padding: "1.25rem" }} key={entry.id}>
+              <div className="flex-between" style={{ flexWrap: "wrap" }}>
                 <div>
                   <strong>{entry.user.fullName ?? entry.user.email}</strong>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="card-description" style={{ marginTop: "0.25rem" }}>
                     {entry.event.name} &middot; {entry.date.toISOString().slice(0, 10)} &middot; {entry.startTime} - {entry.endTime} &middot; {Number(entry.hours).toFixed(2)}h &middot; {entry.rateType.replaceAll("_", " ")}
                   </p>
-                  {entry.comment && <p className="mt-1 text-sm text-slate-500">Note: {entry.comment}</p>}
+                  {entry.comment && <p className="card-description" style={{ marginTop: "0.25rem" }}>Note: {entry.comment}</p>}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex-start" style={{ flexWrap: "wrap" }}>
                   <form action="/api/timesheets/review" method="post">
                     <input name="entryId" type="hidden" value={entry.id} />
                     <input name="action" type="hidden" value="approve" />
                     <button className="button" type="submit">Approve</button>
                   </form>
-                  <form action="/api/timesheets/review" className="flex flex-wrap gap-2" method="post">
+                  <form action="/api/timesheets/review" className="flex-start" style={{ flexWrap: "wrap" }} method="post">
                     <input name="entryId" type="hidden" value={entry.id} />
                     <input name="action" type="hidden" value="reject" />
-                    <input className="rounded-full border border-slate-300 px-4 py-2" name="comment" placeholder="Reason required" required />
+                    <input className="single-input" name="comment" placeholder="Reason required" required />
                     <button className="button secondary" type="submit">Reject</button>
                   </form>
                 </div>
               </div>
             </div>
           ))}
-          {pendingEntries.length === 0 && <p className="text-sm text-slate-500">No pending entries.</p>}
+          {pendingEntries.length === 0 && <p className="card-description">No pending entries.</p>}
         </div>
       </Card>
     </PageShell>
