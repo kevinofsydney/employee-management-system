@@ -1,4 +1,4 @@
-import { DocumentType } from "@prisma/client";
+import { AuditAction, DocumentType } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAppUser } from "@/lib/auth";
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: user.id,
     targetUserId: user.id,
-    action: "DOCUMENT_UPLOADED",
+    action: AuditAction.DOCUMENT_UPLOADED,
     entityType: "Document",
     entityId: document.id,
     details: { type: documentType, sizeBytes: file.size }

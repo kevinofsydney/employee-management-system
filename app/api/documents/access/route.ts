@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAppUser } from "@/lib/auth";
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
   await logAudit({
     actorId: user.id,
     targetUserId: document.userId,
-    action: mode === "download" ? "DOCUMENT_DOWNLOADED" : "DOCUMENT_VIEWED",
+    action: mode === "download" ? AuditAction.DOCUMENT_DOWNLOADED : AuditAction.DOCUMENT_VIEWED,
     entityType: "Document",
     entityId: document.id
   });

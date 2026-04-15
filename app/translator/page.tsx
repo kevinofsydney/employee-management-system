@@ -1,35 +1,27 @@
+import Link from "next/link";
+
 import { Badge, Card, PageShell } from "@/components/ui";
+import { ProgressBar } from "@/components/progress-bar";
 import { TimesheetForm } from "@/components/timesheet-form";
 import { requireAppUser } from "@/lib/auth";
-import { getPayPeriodStartDay } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { documentLabels, requiredDocumentTypes } from "@/lib/documents";
-import { getPayPeriodRange } from "@/lib/periods";
-import Link from "next/link";
 
 export default async function TranslatorPage() {
   const user = await requireAppUser();
-  const payPeriodStartDay = await getPayPeriodStartDay();
-  const [documents, timesheets, projects, languagePairs] = await Promise.all([
+  const [documents, entries, events, languagePairs] = await Promise.all([
     prisma.document.findMany({
       where: { userId: user.id },
       orderBy: { type: "asc" }
     }),
-    prisma.timesheet.findMany({
+    prisma.timesheetEntry.findMany({
       where: { userId: user.id },
-      include: {
-        lineItems: {
-          include: {
-            project: true,
-            languagePair: true
-          }
-        }
-      },
-      orderBy: { periodStart: "desc" }
+      include: { event: true },
+      orderBy: { date: "desc" }
     }),
-    prisma.project.findMany({
+    prisma.event.findMany({
       where: { isActive: true },
-      orderBy: { name: "asc" }
+      orderBy: { startDate: "desc" }
     }),
     prisma.languagePair.findMany({
       where: { isActive: true },
@@ -38,22 +30,35 @@ export default async function TranslatorPage() {
   ]);
 
   const configuredLanguagePairs = user.languagePairs.map((entry: (typeof user.languagePairs)[number]) => entry.languagePair);
-  const currentPeriod = getPayPeriodRange(new Date(), payPeriodStartDay);
   const onboarding = user.onboarding;
-  const editableTimesheet = timesheets.find(
-    (timesheet: (typeof timesheets)[number]) =>
-      timesheet.periodStart.toISOString() === currentPeriod.start.toISOString() &&
-      timesheet.periodEnd.toISOString() === currentPeriod.end.toISOString() &&
-      ["DRAFT", "REJECTED"].includes(timesheet.status)
-  );
   const documentMap = new Map<(typeof documents)[number]["type"], (typeof documents)[number]>(
     documents.map((document: (typeof documents)[number]) => [document.type, document])
   );
 
+  const profileDone = Boolean(onboarding?.profileCompletedAt);
+  const docsDone = Boolean(onboarding?.documentsCompletedAt);
+  const agreementsDone = Boolean(onboarding?.agreementsCompletedAt);
+  const submitted = Boolean(onboarding?.submittedAt);
+
+  const progressSteps = [
+    { label: "Profile", status: profileDone ? "complete" as const : onboarding?.currentStep === "PROFILE" ? "in_progress" as const : "not_started" as const },
+    { label: "Documents", status: docsDone ? "complete" as const : onboarding?.currentStep === "DOCUMENTS" ? "in_progress" as const : "not_started" as const },
+    { label: "Agreements", status: agreementsDone ? "complete" as const : onboarding?.currentStep === "AGREEMENTS" ? "in_progress" as const : "not_started" as const },
+    { label: "Confirmation", status: submitted ? "complete" as const : onboarding?.currentStep === "CONFIRMATION" ? "in_progress" as const : "not_started" as const }
+  ];
+
+  const eventOptions = events.map((e) => ({
+    id: e.id,
+    name: e.name,
+    startDate: e.startDate.toISOString().slice(0, 10),
+    endDate: e.endDate.toISOString().slice(0, 10),
+    city: e.city
+  }));
+
   return (
     <PageShell
       title={`Welcome, ${user.preferredName ?? user.fullName ?? user.email}`}
-      description="Complete each onboarding requirement, then submit weekly timesheets once Kevin or David activates your account."
+      description="Complete each onboarding requirement, then submit timesheet entries once Kevin or David activates your account."
     >
       <div className="grid-auto">
         <Card>
@@ -64,15 +69,15 @@ export default async function TranslatorPage() {
           </div>
         </Card>
         <Card>
-          <h2 className="text-xl font-semibold">Current pay period</h2>
-          <p className="mt-3 text-sm text-slate-600">
-            {currentPeriod.start.toISOString().slice(0, 10)} to {currentPeriod.end.toISOString().slice(0, 10)}
-          </p>
+          <h2 className="text-xl font-semibold">Onboarding progress</h2>
+          <div className="mt-4">
+            <ProgressBar steps={progressSteps} />
+          </div>
         </Card>
       </div>
 
       <Card>
-        <h2 className="text-2xl font-semibold">Profile details</h2>
+        <h2 className="text-2xl font-semibold">Step 1: Profile details</h2>
         <form action="/api/onboarding/profile" className="mt-5 grid gap-4" method="post">
           <div className="grid-auto">
             <div className="field">
@@ -88,17 +93,31 @@ export default async function TranslatorPage() {
               <input defaultValue={user.phone ?? ""} id="phone" name="phone" required />
             </div>
             <div className="field">
+              <label htmlFor="city">City</label>
+              <input defaultValue={user.city ?? ""} id="city" name="city" required />
+            </div>
+          </div>
+          <div className="grid-auto">
+            <div className="field">
+              <label htmlFor="tfn">Tax File Number (9 digits)</label>
+              <input defaultValue={user.tfn ?? ""} id="tfn" maxLength={9} name="tfn" pattern="\d{9}" required title="TFN must be exactly 9 digits" />
+            </div>
+            <div className="field">
+              <label htmlFor="bsb">BSB (6 digits)</label>
+              <input defaultValue={user.bsb ?? ""} id="bsb" maxLength={6} name="bsb" pattern="\d{6}" required title="BSB must be exactly 6 digits" />
+            </div>
+            <div className="field">
               <label htmlFor="yearsOfExperience">Years of experience</label>
               <input defaultValue={user.yearsOfExperience ?? 0} id="yearsOfExperience" min="0" name="yearsOfExperience" required type="number" />
             </div>
           </div>
           <div className="field">
             <label htmlFor="mailingAddress">Mailing address</label>
-            <textarea defaultValue={user.mailingAddress ?? ""} id="mailingAddress" name="mailingAddress" required rows={4} />
+            <textarea defaultValue={user.mailingAddress ?? ""} id="mailingAddress" name="mailingAddress" required rows={3} />
           </div>
           <div className="field">
             <label htmlFor="certifications">Certifications</label>
-            <textarea defaultValue={user.certifications ?? ""} id="certifications" name="certifications" rows={3} />
+            <textarea defaultValue={user.certifications ?? ""} id="certifications" name="certifications" rows={2} />
           </div>
           <div className="field">
             <label>Language pairs</label>
@@ -127,7 +146,7 @@ export default async function TranslatorPage() {
       </Card>
 
       <Card>
-        <h2 className="text-2xl font-semibold">Onboarding checklist</h2>
+        <h2 className="text-2xl font-semibold">Step 2: Document uploads</h2>
         <div className="mt-5 grid-auto">
           {requiredDocumentTypes.map((type) => {
             const document = documentMap.get(type);
@@ -150,7 +169,7 @@ export default async function TranslatorPage() {
                   <p className="mt-3 text-sm text-rose-700">Admin note: {document.adminComment}</p>
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <input accept=".pdf,.png,.jpg,.jpeg" name="file" required type="file" />
+                  <input accept=".pdf,.png,.jpg,.jpeg,.docx" name="file" required type="file" />
                   <button className="button secondary" type="submit">
                     Upload
                   </button>
@@ -177,13 +196,20 @@ export default async function TranslatorPage() {
             {onboarding?.docEmailFallback ? <Badge tone="warning">Documents declared emailed</Badge> : null}
           </form>
         </Card>
-        <form action="/api/onboarding/agreements" className="mt-6 grid gap-4" method="post">
+      </Card>
+
+      <Card>
+        <h2 className="text-2xl font-semibold">Step 3: Consent & declarations</h2>
+        <form action="/api/onboarding/agreements" className="mt-5 grid gap-4" method="post">
           <div className="field">
-            <label htmlFor="signatureName">Signature name</label>
+            <label htmlFor="signatureName">Signature (type your full legal name)</label>
             <input defaultValue={user.fullName ?? ""} id="signatureName" name="signatureName" required />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input name="consentGiven" required type="checkbox" /> I agree to the contractor agreement and confidentiality terms.
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input required type="checkbox" /> I confirm all information provided is accurate and complete.
           </label>
           <button className="button secondary" type="submit">
             Save agreement step
@@ -196,69 +222,51 @@ export default async function TranslatorPage() {
         </form>
       </Card>
 
-      <Card>
-        <h2 className="text-2xl font-semibold">Submit timesheet</h2>
-        {editableTimesheet?.adminComment ? (
-          <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            Admin note on your last revision: {editableTimesheet.adminComment}
-          </p>
-        ) : null}
-        <TimesheetForm
-          action="/api/timesheets"
-          disabled={user.status !== "ACTIVE"}
-          initialItems={
-            editableTimesheet?.lineItems.map((item: (typeof editableTimesheet.lineItems)[number]) => ({
-              projectId: item.projectId,
-              languagePairId: item.languagePairId,
-              hours: Number(item.hours).toString(),
-              note: item.note ?? ""
-            })) ?? []
-          }
-          languagePairs={configuredLanguagePairs.map((languagePair: (typeof configuredLanguagePairs)[number]) => ({
-            id: languagePair.id,
-            label: languagePair.label
-          }))}
-          periodEnd={currentPeriod.end.toISOString()}
-          periodStart={currentPeriod.start.toISOString()}
-          projects={projects.map((project: (typeof projects)[number]) => ({
-            id: project.id,
-            label: project.name
-          }))}
-        />
-      </Card>
+      {user.status === "ACTIVE" && (
+        <>
+          <Card>
+            <h2 className="text-2xl font-semibold">Submit timesheet entry</h2>
+            <TimesheetForm
+              action="/api/timesheets"
+              disabled={user.status !== "ACTIVE"}
+              events={eventOptions}
+            />
+          </Card>
 
-      <Card>
-        <h2 className="text-2xl font-semibold">Timesheet history</h2>
-        <table className="table mt-5">
-          <thead>
-            <tr>
-              <th>Period</th>
-              <th>Status</th>
-              <th>Total hours</th>
-            </tr>
-          </thead>
-          <tbody>
-            {timesheets.map((timesheet: (typeof timesheets)[number]) => {
-              const totalHours = timesheet.lineItems.reduce(
-                (sum: number, item: (typeof timesheet.lineItems)[number]) => sum + Number(item.hours),
-                0
-              );
-              return (
-                <tr key={timesheet.id}>
-                  <td>
-                    {timesheet.periodStart.toISOString().slice(0, 10)} to {timesheet.periodEnd.toISOString().slice(0, 10)}
-                  </td>
-                  <td>
-                    {timesheet.status}
-                    {timesheet.adminComment ? <div className="mt-1 text-sm text-rose-700">{timesheet.adminComment}</div> : null}
-                  </td>
-                  <td>{totalHours.toFixed(2)}</td>
+          <Card>
+            <h2 className="text-2xl font-semibold">Timesheet history</h2>
+            <table className="table mt-5">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Hours</th>
+                  <th>Rate type</th>
+                  <th>Status</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
+              </thead>
+              <tbody>
+                {entries.map((entry: (typeof entries)[number]) => (
+                  <tr key={entry.id}>
+                    <td>{entry.event.name}</td>
+                    <td>{entry.date.toISOString().slice(0, 10)}</td>
+                    <td>{entry.startTime} - {entry.endTime}</td>
+                    <td>{Number(entry.hours).toFixed(2)}</td>
+                    <td>{entry.rateType.replaceAll("_", " ")}</td>
+                    <td>
+                      <Badge tone={entry.status === "APPROVED" ? "success" : entry.status === "REJECTED" ? "danger" : "default"}>
+                        {entry.status}
+                      </Badge>
+                      {entry.adminComment ? <div className="mt-1 text-sm text-rose-700">{entry.adminComment}</div> : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </>
+      )}
     </PageShell>
   );
 }

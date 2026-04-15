@@ -70,15 +70,25 @@ enum AuditAction {
   TIMESHEET_APPROVED
   TIMESHEET_REJECTED
   TIMESHEET_REOPENED
+  ENTRY_SPLIT
+  EVENT_CREATED
+  EVENT_UPDATED
+  EVENT_DELETED
   CSV_EXPORTED
   JOB_RUN_COMPLETED
 }
 
-enum TimesheetStatus {
-  DRAFT
-  SUBMITTED
+enum TimesheetEntryStatus {
+  PENDING
   APPROVED
   REJECTED
+}
+
+enum RateType {
+  STANDARD
+  SUNDAY
+  OVERTIME
+  PUBLIC_HOLIDAY
 }
 
 model User {
@@ -91,6 +101,9 @@ model User {
   status             AccountStatus          @default(INVITED)
   phone              String?
   mailingAddress     String?
+  city               String?
+  tfn                String?
+  bsb                String?
   yearsOfExperience  Int?
   certifications     String?
   privacyAcceptedAt  DateTime?
@@ -102,7 +115,8 @@ model User {
   documents          Document[]
   invitesSent        Invite[]               @relation("InvitedBy")
   invites            Invite[]               @relation("InvitedUser")
-  timesheets         Timesheet[]
+  timesheetEntries   TimesheetEntry[]
+  notifications      Notification[]
   auditLogs          AuditLog[]             @relation("ActorAuditLogs")
 }
 
@@ -170,12 +184,11 @@ model DocumentAccessAudit {
 }
 
 model Project {
-  id             String              @id @default(cuid())
-  name           String              @unique
-  isActive       Boolean             @default(true)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  timesheetItems TimesheetLineItem[]
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model LanguagePair {
@@ -185,7 +198,6 @@ model LanguagePair {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   users     UserLanguagePair[]
-  items     TimesheetLineItem[]
 }
 
 model UserLanguagePair {
@@ -197,36 +209,60 @@ model UserLanguagePair {
   @@id([userId, languagePairId])
 }
 
-model Timesheet {
-  id           String          @id @default(cuid())
-  userId       String
-  periodStart  DateTime
-  periodEnd    DateTime
-  status       TimesheetStatus @default(DRAFT)
-  adminComment String?
-  submittedAt  DateTime?
-  reviewedAt   DateTime?
-  reopenedAt   DateTime?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lineItems    TimesheetLineItem[]
-
-  @@index([userId, periodStart, periodEnd, status])
+model Event {
+  id        String           @id @default(cuid())
+  name      String
+  startDate DateTime         @db.Date
+  endDate   DateTime         @db.Date
+  city      String
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  entries   TimesheetEntry[]
 }
 
-model TimesheetLineItem {
-  id             String       @id @default(cuid())
-  timesheetId    String
-  projectId      String
-  languagePairId String
-  hours          Decimal      @db.Decimal(6, 2)
-  note           String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  timesheet      Timesheet    @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
-  project        Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  languagePair   LanguagePair @relation(fields: [languagePairId], references: [id], onDelete: Restrict)
+model TimesheetEntry {
+  id           String               @id @default(cuid())
+  userId       String
+  eventId      String
+  date         DateTime             @db.Date
+  startTime    String               // HH:mm format, rounded to 15min
+  endTime      String               // HH:mm format, rounded to 15min
+  hours        Decimal              @db.Decimal(6, 2)
+  rateType     RateType             @default(STANDARD)
+  comment      String?
+  status       TimesheetEntryStatus @default(PENDING)
+  adminComment String?
+  submittedAt  DateTime             @default(now())
+  reviewedAt   DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event        Event                @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  @@index([userId, eventId, date, status])
+}
+
+model HourlyRate {
+  id        String   @id @default(cuid())
+  rateType  RateType @unique
+  amount    Decimal  @db.Decimal(8, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
 }
 
 model AppConfig {

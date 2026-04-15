@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAppUser } from "@/lib/auth";
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
   await logAudit({
     actorId: user.id,
     targetUserId: user.id,
-    action: "INVITE_REDEEMED",
+    action: AuditAction.INVITE_REDEEMED,
     entityType: "Invite",
     entityId: invite.id
   });

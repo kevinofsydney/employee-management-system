@@ -1,122 +1,172 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAppUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { sendAdminNotification, sendTransactionalEmail } from "@/lib/email";
-import { submitTimesheetSchema } from "@/lib/validators";
+import { notifyAdmins } from "@/lib/notifications";
+import { roundStartTime, roundEndTime, calculateHours } from "@/lib/time";
+import { timesheetEntrySchema } from "@/lib/validators";
 
 export async function POST(request: Request) {
   const user = await requireAppUser();
 
   if (user.status !== "ACTIVE") {
-    return NextResponse.json({ error: "Only active translators can submit timesheets." }, { status: 403 });
+    return NextResponse.json({ error: "Only active translators can submit timesheet entries." }, { status: 403 });
   }
 
   const formData = await request.formData();
-  const payload = submitTimesheetSchema.parse({
-    periodStart: formData.get("periodStart"),
-    periodEnd: formData.get("periodEnd"),
-    mode: formData.get("mode"),
-    items: JSON.parse(formData.get("lineItemsJson")?.toString() ?? "[]")
-  });
-  const periodStart = new Date(payload.periodStart);
-  const periodEnd = new Date(payload.periodEnd);
-
-  const existingApproved = await prisma.timesheet.findFirst({
-    where: {
-      userId: user.id,
-      periodStart,
-      periodEnd,
-      status: "APPROVED",
-      reopenedAt: null
-    }
+  const payload = timesheetEntrySchema.parse({
+    eventId: formData.get("eventId"),
+    date: formData.get("date"),
+    startTime: formData.get("startTime"),
+    endTime: formData.get("endTime"),
+    rateType: formData.get("rateType"),
+    comment: formData.get("comment")
   });
 
-  if (existingApproved) {
-    return NextResponse.json({ error: "An approved timesheet already exists for this pay period." }, { status: 409 });
+  const event = await prisma.event.findUnique({ where: { id: payload.eventId } });
+  if (!event) {
+    return NextResponse.json({ error: "Event not found." }, { status: 404 });
   }
 
-  const editableExisting = await prisma.timesheet.findFirst({
+  const entryDate = new Date(payload.date);
+  if (entryDate < event.startDate || entryDate > event.endDate) {
+    return NextResponse.json({ error: "Date must fall within the event's date range." }, { status: 400 });
+  }
+
+  const roundedStart = roundStartTime(payload.startTime);
+  const roundedEnd = roundEndTime(payload.endTime);
+  const hours = calculateHours(roundedStart, roundedEnd);
+
+  if (hours <= 0) {
+    return NextResponse.json({ error: "End time must be after start time." }, { status: 400 });
+  }
+
+  // Duplicate guard: block if approved entry exists for same event + date + overlapping time
+  const duplicate = await prisma.timesheetEntry.findFirst({
     where: {
       userId: user.id,
-      periodStart,
-      periodEnd,
-      status: { in: ["DRAFT", "REJECTED"] }
-    },
-    orderBy: {
-      updatedAt: "desc"
+      eventId: payload.eventId,
+      date: entryDate,
+      startTime: roundedStart,
+      endTime: roundedEnd,
+      status: "APPROVED"
     }
   });
 
-  const timesheet = editableExisting
-    ? await prisma.timesheet.update({
-        where: { id: editableExisting.id },
-        data: {
-          status: payload.mode === "submit" ? "SUBMITTED" : "DRAFT",
-          submittedAt: payload.mode === "submit" ? new Date() : null,
-          reviewedAt: null,
-          reopenedAt: payload.mode === "submit" ? null : editableExisting.reopenedAt,
-          adminComment: payload.mode === "submit" ? null : editableExisting.adminComment,
-          lineItems: {
-            deleteMany: {},
-            create: payload.items.map((item) => ({
-              projectId: item.projectId,
-              languagePairId: item.languagePairId,
-              hours: item.hours,
-              note: item.note || undefined
-            }))
-          }
-        }
-      })
-    : await prisma.timesheet.create({
-        data: {
-          userId: user.id,
-          periodStart,
-          periodEnd,
-          status: payload.mode === "submit" ? "SUBMITTED" : "DRAFT",
-          submittedAt: payload.mode === "submit" ? new Date() : null,
-          lineItems: {
-            create: payload.items.map((item) => ({
-              projectId: item.projectId,
-              languagePairId: item.languagePairId,
-              hours: item.hours,
-              note: item.note || undefined
-            }))
-          }
-        }
-      });
+  if (duplicate) {
+    return NextResponse.json({ error: "An approved entry already exists for this event, date, and time range." }, { status: 409 });
+  }
+
+  const entry = await prisma.timesheetEntry.create({
+    data: {
+      userId: user.id,
+      eventId: payload.eventId,
+      date: entryDate,
+      startTime: roundedStart,
+      endTime: roundedEnd,
+      hours,
+      rateType: payload.rateType,
+      comment: payload.comment || undefined,
+      status: "PENDING",
+      submittedAt: new Date()
+    }
+  });
 
   await logAudit({
     actorId: user.id,
     targetUserId: user.id,
-    action: payload.mode === "submit" ? "TIMESHEET_SUBMITTED" : "TIMESHEET_CREATED",
-    entityType: "Timesheet",
-    entityId: timesheet.id,
-    details: {
-      mode: payload.mode,
-      itemCount: payload.items.length,
-      totalHours: payload.items.reduce((sum, item) => sum + item.hours, 0)
-    }
+    action: AuditAction.TIMESHEET_SUBMITTED,
+    entityType: "TimesheetEntry",
+    entityId: entry.id,
+    details: { eventId: payload.eventId, date: payload.date, hours, rateType: payload.rateType }
   });
-
-  const totalHours = payload.items.reduce((sum, item) => sum + item.hours, 0);
 
   await Promise.all([
     sendTransactionalEmail({
       to: user.email,
-      subject: "Your Courant timesheet was received",
-      html: `<p>Your timesheet for ${periodStart.toISOString().slice(0, 10)} to ${periodEnd.toISOString().slice(0, 10)} has been ${payload.mode === "submit" ? "submitted" : "saved as a draft"}.</p>`
+      subject: "Your Courant timesheet entry was received",
+      html: `<p>Your timesheet entry for ${event.name} on ${payload.date} (${hours.toFixed(2)} hours, ${payload.rateType}) has been submitted.</p>`
     }),
-    ...(payload.mode === "submit"
-      ? [
-          sendAdminNotification({
-            subject: "New timesheet submitted",
-            html: `<p>${user.fullName ?? user.email} submitted a timesheet totaling ${totalHours.toFixed(2)} hours.</p><p><a href="${new URL("/admin", request.url).toString()}">Open review queue</a></p>`
-          })
-        ]
-      : [])
+    sendAdminNotification({
+      subject: "New timesheet entry submitted",
+      html: `<p>${user.fullName ?? user.email} submitted a timesheet entry for ${event.name} on ${payload.date} (${hours.toFixed(2)} hours).</p><p><a href="${new URL("/admin", request.url).toString()}">Open review queue</a></p>`
+    }),
+    notifyAdmins({
+      type: "timesheet_submitted",
+      title: "Timesheet entry submitted",
+      message: `${user.fullName ?? user.email} submitted ${hours.toFixed(2)}h for ${event.name} on ${payload.date}`,
+      link: "/admin"
+    })
   ]);
+
+  return NextResponse.redirect(new URL("/translator", request.url));
+}
+
+export async function PATCH(request: Request) {
+  const user = await requireAppUser();
+
+  if (user.status !== "ACTIVE") {
+    return NextResponse.json({ error: "Only active translators can edit timesheet entries." }, { status: 403 });
+  }
+
+  const formData = await request.formData();
+  const entryId = formData.get("entryId")?.toString();
+
+  if (!entryId) {
+    return NextResponse.json({ error: "Entry ID required." }, { status: 400 });
+  }
+
+  const existing = await prisma.timesheetEntry.findUnique({ where: { id: entryId } });
+  if (!existing || existing.userId !== user.id) {
+    return NextResponse.json({ error: "Entry not found." }, { status: 404 });
+  }
+
+  const payload = timesheetEntrySchema.parse({
+    eventId: formData.get("eventId"),
+    date: formData.get("date"),
+    startTime: formData.get("startTime"),
+    endTime: formData.get("endTime"),
+    rateType: formData.get("rateType"),
+    comment: formData.get("comment")
+  });
+
+  const event = await prisma.event.findUnique({ where: { id: payload.eventId } });
+  if (!event) {
+    return NextResponse.json({ error: "Event not found." }, { status: 404 });
+  }
+
+  const entryDate = new Date(payload.date);
+  if (entryDate < event.startDate || entryDate > event.endDate) {
+    return NextResponse.json({ error: "Date must fall within the event's date range." }, { status: 400 });
+  }
+
+  const roundedStart = roundStartTime(payload.startTime);
+  const roundedEnd = roundEndTime(payload.endTime);
+  const hours = calculateHours(roundedStart, roundedEnd);
+
+  if (hours <= 0) {
+    return NextResponse.json({ error: "End time must be after start time." }, { status: 400 });
+  }
+
+  await prisma.timesheetEntry.update({
+    where: { id: entryId },
+    data: {
+      eventId: payload.eventId,
+      date: entryDate,
+      startTime: roundedStart,
+      endTime: roundedEnd,
+      hours,
+      rateType: payload.rateType,
+      comment: payload.comment || undefined,
+      status: "PENDING",
+      submittedAt: new Date(),
+      reviewedAt: null,
+      adminComment: null
+    }
+  });
 
   return NextResponse.redirect(new URL("/translator", request.url));
 }

@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAppUser } from "@/lib/auth";
@@ -13,6 +14,9 @@ export async function POST(request: Request) {
     preferredName: formData.get("preferredName"),
     phone: formData.get("phone"),
     mailingAddress: formData.get("mailingAddress"),
+    city: formData.get("city"),
+    tfn: formData.get("tfn"),
+    bsb: formData.get("bsb"),
     yearsOfExperience: formData.get("yearsOfExperience"),
     certifications: formData.get("certifications"),
     languagePairIds: formData.getAll("languagePairIds"),
@@ -27,6 +31,9 @@ export async function POST(request: Request) {
         preferredName: payload.preferredName,
         phone: payload.phone,
         mailingAddress: payload.mailingAddress,
+        city: payload.city,
+        tfn: payload.tfn,
+        bsb: payload.bsb,
         yearsOfExperience: payload.yearsOfExperience,
         certifications: payload.certifications,
         privacyAcceptedAt: payload.privacyAccepted ? new Date() : undefined,
@@ -56,7 +63,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: user.id,
     targetUserId: user.id,
-    action: "ONBOARDING_STEP_SAVED",
+    action: AuditAction.ONBOARDING_STEP_SAVED,
     entityType: "OnboardingSubmission",
     entityId: user.id,
     details: { step: "PROFILE" }
