@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 
+import type { RateType } from "@prisma/client";
+
+import { roundStartTime, roundEndTime, calculateHours } from "@/lib/time";
+
 type EventOption = {
   id: string;
   name: string;
@@ -10,34 +14,12 @@ type EventOption = {
   city: string;
 };
 
-const RATE_TYPES = [
+const RATE_TYPES: { value: RateType; label: string }[] = [
   { value: "STANDARD", label: "Standard" },
   { value: "SUNDAY", label: "Sunday" },
   { value: "OVERTIME", label: "Overtime" },
   { value: "PUBLIC_HOLIDAY", label: "Public Holiday" }
 ];
-
-function roundStartDown(time: string): string {
-  const [h, m] = time.split(":").map(Number);
-  const rounded = Math.floor(m / 15) * 15;
-  return `${String(h).padStart(2, "0")}:${String(rounded).padStart(2, "0")}`;
-}
-
-function roundEndUp(time: string): string {
-  const [h, m] = time.split(":").map(Number);
-  if (m % 15 === 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  const rounded = Math.ceil(m / 15) * 15;
-  if (rounded >= 60) return `${String(h + 1).padStart(2, "0")}:00`;
-  return `${String(h).padStart(2, "0")}:${String(rounded).padStart(2, "0")}`;
-}
-
-function calcHours(start: string, end: string): number {
-  if (!start || !end) return 0;
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  const diff = (eh * 60 + em) - (sh * 60 + sm);
-  return diff > 0 ? Math.round((diff / 60) * 100) / 100 : 0;
-}
 
 export function TimesheetForm({
   action,
@@ -54,7 +36,7 @@ export function TimesheetForm({
     date: string;
     startTime: string;
     endTime: string;
-    rateType: string;
+    rateType: RateType;
     comment: string;
   };
 }) {
@@ -63,14 +45,14 @@ export function TimesheetForm({
   const [date, setDate] = useState(editEntry?.date ?? "");
   const [startTime, setStartTime] = useState(editEntry?.startTime ?? "");
   const [endTime, setEndTime] = useState(editEntry?.endTime ?? "");
-  const [rateType, setRateType] = useState(editEntry?.rateType ?? "STANDARD");
+  const [rateType, setRateType] = useState<RateType>(editEntry?.rateType ?? "STANDARD");
   const [comment, setComment] = useState(editEntry?.comment ?? "");
 
   const selectedEvent = events.find((e) => e.id === eventId);
 
-  const roundedStart = useMemo(() => startTime ? roundStartDown(startTime) : "", [startTime]);
-  const roundedEnd = useMemo(() => endTime ? roundEndUp(endTime) : "", [endTime]);
-  const hours = useMemo(() => calcHours(roundedStart, roundedEnd), [roundedStart, roundedEnd]);
+  const roundedStart = useMemo(() => startTime ? roundStartTime(startTime) : "", [startTime]);
+  const roundedEnd = useMemo(() => endTime ? roundEndTime(endTime) : "", [endTime]);
+  const hours = useMemo(() => (roundedStart && roundedEnd) ? calculateHours(roundedStart, roundedEnd) : 0, [roundedStart, roundedEnd]);
 
   return (
     <form action={action} className="mt-5 grid gap-4" method="post">
@@ -141,7 +123,7 @@ export function TimesheetForm({
         </div>
         <div className="field">
           <label htmlFor="ts-rate">Rate type</label>
-          <select id="ts-rate" onChange={(e) => setRateType(e.target.value)} value={rateType}>
+          <select id="ts-rate" onChange={(e) => setRateType(e.target.value as RateType)} value={rateType}>
             {RATE_TYPES.map((rt) => (
               <option key={rt.value} value={rt.value}>{rt.label}</option>
             ))}

@@ -1,4 +1,4 @@
-import { AuditAction } from "@prisma/client";
+import { AccountStatus, AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -6,19 +6,28 @@ import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { sendTransactionalEmail } from "@/lib/email";
 
+const allowedStatusTransitions = [AccountStatus.ACTIVE, AccountStatus.INACTIVE] as const;
+type StatusTransition = (typeof allowedStatusTransitions)[number];
+
+function isAllowedStatus(value: string): value is StatusTransition {
+  return (allowedStatusTransitions as readonly string[]).includes(value);
+}
+
 export async function POST(request: Request) {
   const admin = await requireAdmin();
   const formData = await request.formData();
   const userId = formData.get("userId")?.toString();
-  const status = formData.get("status")?.toString();
+  const statusRaw = formData.get("status")?.toString();
 
-  if (!userId || !["ACTIVE", "INACTIVE"].includes(status ?? "")) {
+  if (!userId || !statusRaw || !isAllowedStatus(statusRaw)) {
     return NextResponse.json({ error: "Invalid user status request." }, { status: 400 });
   }
 
+  const status: StatusTransition = statusRaw;
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
-    data: { status: status as "ACTIVE" | "INACTIVE" }
+    data: { status }
   });
 
   await logAudit({

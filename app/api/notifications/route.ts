@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
 import { requireAppUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+
+const markReadSchema = z.object({
+  notificationId: z.union([z.literal("all"), z.string().min(1)])
+});
 
 export async function GET() {
   const user = await requireAppUser();
@@ -15,7 +20,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const user = await requireAppUser();
-  const body = await request.json();
+  const body = markReadSchema.parse(await request.json());
   const { notificationId } = body;
 
   if (notificationId === "all") {

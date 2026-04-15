@@ -8,13 +8,6 @@ async function main() {
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 
-  const projects = [
-    "Courant Internal",
-    "Client Alpha",
-    "Client Bravo",
-    "Client Charlie"
-  ];
-
   const languagePairs = [
     "English -> Japanese",
     "Japanese -> English",
@@ -36,14 +29,6 @@ async function main() {
     { rateType: "OVERTIME", amount: 67.50 },
     { rateType: "PUBLIC_HOLIDAY", amount: 90.00 }
   ];
-
-  for (const name of projects) {
-    await prisma.project.upsert({
-      where: { name },
-      update: { isActive: true },
-      create: { name, isActive: true }
-    });
-  }
 
   for (const label of languagePairs) {
     await prisma.languagePair.upsert({
@@ -68,12 +53,6 @@ async function main() {
     });
   }
 
-  await prisma.appConfig.upsert({
-    where: { key: "pay_period_start_day" },
-    update: { value: process.env.DEFAULT_PAY_PERIOD_START_DAY ?? "1" },
-    create: { key: "pay_period_start_day", value: process.env.DEFAULT_PAY_PERIOD_START_DAY ?? "1" }
-  });
-
   for (const email of adminEmails) {
     await prisma.user.upsert({
       where: { email },
@@ -91,7 +70,7 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${projects.length} projects, ${languagePairs.length} language pairs, ${events.length} events, ${hourlyRates.length} hourly rates, and ${adminEmails.length} admin records.`);
+  console.log(`Seeded ${languagePairs.length} language pairs, ${events.length} events, ${hourlyRates.length} hourly rates, and ${adminEmails.length} admin records.`);
 }
 
 main()

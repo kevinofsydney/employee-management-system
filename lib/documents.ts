@@ -1,4 +1,5 @@
 import { DocumentType } from "@prisma/client";
+import { z } from "zod";
 
 import { env } from "@/lib/env";
 
@@ -54,7 +55,7 @@ export const scanFile = async (bytes: Buffer) => {
       throw new Error(`Malware scan request failed with status ${response.status}.`);
     }
 
-    const result = (await response.json()) as { clean?: boolean; threat?: string };
+    const result = z.object({ clean: z.boolean().optional(), threat: z.string().optional() }).parse(await response.json());
     return {
       clean: Boolean(result.clean),
       threat: result.threat,
