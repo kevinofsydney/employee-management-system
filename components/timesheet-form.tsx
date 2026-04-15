@@ -45,7 +45,7 @@ export function TimesheetForm({
   const [date, setDate] = useState(editEntry?.date ?? "");
   const [startTime, setStartTime] = useState(editEntry?.startTime ?? "");
   const [endTime, setEndTime] = useState(editEntry?.endTime ?? "");
-  const [rateType, setRateType] = useState(editEntry?.rateType ?? "STANDARD");
+  const [rateType, setRateType] = useState<RateType>(editEntry?.rateType ?? "STANDARD");
   const [comment, setComment] = useState(editEntry?.comment ?? "");
 
   const selectedEvent = events.find((e) => e.id === eventId);
@@ -123,7 +123,7 @@ export function TimesheetForm({
         </div>
         <div className="field">
           <label htmlFor="ts-rate">Rate type</label>
-          <select id="ts-rate" onChange={(e) => setRateType(e.target.value)} value={rateType}>
+          <select id="ts-rate" onChange={(e) => setRateType(e.target.value as RateType)} value={rateType}>
             {RATE_TYPES.map((rt) => (
               <option key={rt.value} value={rt.value}>{rt.label}</option>
             ))}

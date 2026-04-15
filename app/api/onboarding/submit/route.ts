@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const allDocumentsPresent =
     onboarding?.docEmailFallback ||
     requiredDocumentTypes.every((type) =>
-      documents.some((document: (typeof documents)[number]) => document.type === type && ["UPLOADED", "ACCEPTED"].includes(document.status))
+      documents.some((document) => document.type === type && ["UPLOADED", "ACCEPTED"].includes(document.status))
     );
 
   if (!allDocumentsPresent || !onboarding?.signatureTimestamp || !onboarding.profileCompletedAt) {
