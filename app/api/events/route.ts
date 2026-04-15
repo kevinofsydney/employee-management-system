@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 
   await logAudit({
     actorId: admin.id,
-    action: "EVENT_CREATED",
+    action: AuditAction.EVENT_CREATED,
     entityType: "Event",
     entityId: event.id,
     details: { name: payload.name, city: payload.city }

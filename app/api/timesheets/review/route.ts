@@ -1,4 +1,4 @@
-import { TimesheetEntryStatus } from "@prisma/client";
+import { AuditAction, TimesheetEntryStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: admin.id,
     targetUserId: entry.userId,
-    action: payload.action === "approve" ? "TIMESHEET_APPROVED" : "TIMESHEET_REJECTED",
+    action: payload.action === "approve" ? AuditAction.TIMESHEET_APPROVED : AuditAction.TIMESHEET_REJECTED,
     entityType: "TimesheetEntry",
     entityId: entry.id,
     details: { comment: payload.comment }

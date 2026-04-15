@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -53,7 +54,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   await logAudit({
     actorId: admin.id,
     targetUserId: id,
-    action: "ONBOARDING_STEP_SAVED",
+    action: AuditAction.ONBOARDING_STEP_SAVED,
     entityType: "User",
     entityId: id,
     details: { adminEdit: true, fields: Object.keys(payload).filter((k) => payload[k as keyof typeof payload] !== undefined) }

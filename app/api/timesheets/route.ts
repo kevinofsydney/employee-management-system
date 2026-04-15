@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAppUser } from "@/lib/auth";
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: user.id,
     targetUserId: user.id,
-    action: "TIMESHEET_SUBMITTED",
+    action: AuditAction.TIMESHEET_SUBMITTED,
     entityType: "TimesheetEntry",
     entityId: entry.id,
     details: { eventId: payload.eventId, date: payload.date, hours, rateType: payload.rateType }

@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { stringify } from "csv-stringify/sync";
 import { NextResponse } from "next/server";
 
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
 
   await logAudit({
     actorId: admin.id,
-    action: "CSV_EXPORTED",
+    action: AuditAction.CSV_EXPORTED,
     entityType: "TimesheetExport",
     entityId: new Date().toISOString(),
     details: { rowCount: rows.length, from, to }

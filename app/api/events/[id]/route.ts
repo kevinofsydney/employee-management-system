@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -28,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   await logAudit({
     actorId: admin.id,
-    action: "EVENT_UPDATED",
+    action: AuditAction.EVENT_UPDATED,
     entityType: "Event",
     entityId: event.id,
     details: { name: payload.name, city: payload.city }
@@ -56,7 +57,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   await logAudit({
     actorId: admin.id,
-    action: "EVENT_DELETED",
+    action: AuditAction.EVENT_DELETED,
     entityType: "Event",
     entityId: id,
     details: { name: event.name, deletedEntries: deleteEntries }

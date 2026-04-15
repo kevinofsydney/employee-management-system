@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: admin.id,
     targetUserId: entry.userId,
-    action: "TIMESHEET_REOPENED",
+    action: AuditAction.TIMESHEET_REOPENED,
     entityType: "TimesheetEntry",
     entityId: entry.id,
     details: { adminEdited: true, changes: payload }

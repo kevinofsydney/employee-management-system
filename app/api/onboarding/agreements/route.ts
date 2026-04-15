@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: user.id,
     targetUserId: user.id,
-    action: "ONBOARDING_STEP_SAVED",
+    action: AuditAction.ONBOARDING_STEP_SAVED,
     entityType: "OnboardingSubmission",
     entityId: user.id,
     details: { step: "AGREEMENTS" }

@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: admin.id,
     targetUserId: userId,
-    action: status === "ACTIVE" ? "USER_ACTIVATED" : "USER_DEACTIVATED",
+    action: status === "ACTIVE" ? AuditAction.USER_ACTIVATED : AuditAction.USER_DEACTIVATED,
     entityType: "User",
     entityId: userId
   });

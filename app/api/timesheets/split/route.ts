@@ -1,3 +1,4 @@
+import { AuditAction } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth";
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
   await logAudit({
     actorId: admin.id,
     targetUserId: entry.userId,
-    action: "ENTRY_SPLIT",
+    action: AuditAction.ENTRY_SPLIT,
     entityType: "TimesheetEntry",
     entityId: entry.id,
     details: {
