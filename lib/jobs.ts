@@ -1,11 +1,9 @@
 import { AccountStatus, AuditAction } from "@prisma/client";
 
 import { logAudit } from "@/lib/audit";
-import { getPayPeriodStartDay } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { sendAdminNotification, sendTransactionalEmail } from "@/lib/email";
 import { env } from "@/lib/env";
-import { getPayPeriodRange } from "@/lib/periods";
 
 const dayMs = 1000 * 60 * 60 * 24;
 
@@ -79,7 +77,6 @@ export const runOnboardingReminderJob = async () => {
 };
 
 export const runTimesheetReminderJob = async () => {
-  const currentPeriod = getPayPeriodRange(new Date(), await getPayPeriodStartDay());
   const activeUsers = await prisma.user.findMany({
     where: {
       role: "TRANSLATOR",
@@ -88,25 +85,25 @@ export const runTimesheetReminderJob = async () => {
   });
 
   let remindersSent = 0;
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * dayMs);
 
   for (const user of activeUsers) {
-    const existing = await prisma.timesheet.findFirst({
+    const recentEntry = await prisma.timesheetEntry.findFirst({
       where: {
         userId: user.id,
-        periodStart: currentPeriod.start,
-        periodEnd: currentPeriod.end,
-        status: { in: ["SUBMITTED", "APPROVED"] }
+        submittedAt: { gte: sevenDaysAgo }
       }
     });
 
-    if (existing) {
+    if (recentEntry) {
       continue;
     }
 
     await sendTransactionalEmail({
       to: user.email,
-      subject: "Reminder: submit this week's Courant timesheet",
-      html: `<p>This is your reminder to submit your Courant timesheet for the current pay period.</p><p><a href="${env.appUrl}/translator">Open timesheets</a></p>`
+      subject: "Reminder: submit your Courant timesheet entries",
+      html: `<p>This is your reminder to submit your Courant timesheet entries for recent events.</p><p><a href="${env.appUrl}/translator">Open timesheets</a></p>`
     });
     await logAudit({
       targetUserId: user.id,

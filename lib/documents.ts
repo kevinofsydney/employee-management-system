@@ -2,9 +2,9 @@ import { DocumentType } from "@prisma/client";
 
 import { env } from "@/lib/env";
 
-const allowedMimeTypes = ["application/pdf", "image/png", "image/jpeg"];
-const allowedExtensions = [".pdf", ".png", ".jpg", ".jpeg"];
-const maxFileBytes = 10 * 1024 * 1024;
+const allowedMimeTypes = ["application/pdf", "image/png", "image/jpeg", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+const allowedExtensions = [".pdf", ".png", ".jpg", ".jpeg", ".docx"];
+const maxFileBytes = 5 * 1024 * 1024;
 
 export const requiredDocumentTypes: DocumentType[] = [
   "EMPLOYEE_CONTRACT",
@@ -27,11 +27,11 @@ export const validateDocumentUpload = (file: File) => {
   const hasAllowedExtension = allowedExtensions.some((extension) => fileName.endsWith(extension));
 
   if (!allowedMimeTypes.includes(file.type) || !hasAllowedExtension) {
-    throw new Error("Only PDF, PNG, and JPG files are allowed.");
+    throw new Error("Only PDF, PNG, JPG, and DOCX files are allowed.");
   }
 
   if (file.size > maxFileBytes) {
-    throw new Error("Files must be 10 MB or smaller.");
+    throw new Error("Files must be 5 MB or smaller.");
   }
 };
 
