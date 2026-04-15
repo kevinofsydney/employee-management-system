@@ -7,6 +7,12 @@ import { prisma } from "@/lib/db";
 import { scanFile, validateDocumentUpload } from "@/lib/documents";
 import { uploadDocumentToDrive } from "@/lib/drive";
 
+const documentTypes = new Set<string>(Object.values(DocumentType));
+
+function isDocumentType(value: string): value is DocumentType {
+  return documentTypes.has(value);
+}
+
 export async function POST(request: Request) {
   const user = await requireAppUser();
   const formData = await request.formData();
@@ -17,7 +23,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing document type or file." }, { status: 400 });
   }
 
-  const documentType = type.toString() as DocumentType;
+  const typeString = type.toString();
+  if (!isDocumentType(typeString)) {
+    return NextResponse.json({ error: "Invalid document type." }, { status: 400 });
+  }
+
+  const documentType: DocumentType = typeString;
   validateDocumentUpload(file);
 
   const bytes = Buffer.from(await file.arrayBuffer());

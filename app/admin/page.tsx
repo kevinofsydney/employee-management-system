@@ -230,7 +230,7 @@ export default async function AdminPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user: (typeof users)[number]) => {
+            {users.map((user) => {
               const earnings = earningsMap.get(user.id);
               return (
                 <tr key={user.id}>
@@ -270,14 +270,14 @@ export default async function AdminPage() {
         <div className="mt-5 space-y-4">
           {users
             .filter((user) => user.documents.length > 0)
-            .map((user: (typeof users)[number]) => (
+            .map((user) => (
               <div className="rounded-2xl border border-slate-200 p-4" key={`documents-${user.id}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <strong>{user.fullName ?? user.email}</strong>
                   <Badge tone={user.status === "ACTIVE" ? "success" : "default"}>{user.status.replaceAll("_", " ")}</Badge>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {user.documents.map((document: (typeof user.documents)[number]) => (
+                  {user.documents.map((document) => (
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4" key={document.id}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
@@ -321,7 +321,7 @@ export default async function AdminPage() {
       <Card>
         <h2 className="text-2xl font-semibold">Pending timesheet entries</h2>
         <div className="mt-5 space-y-4">
-          {pendingEntries.map((entry: (typeof pendingEntries)[number]) => (
+          {pendingEntries.map((entry) => (
             <div className="rounded-2xl border border-slate-200 p-4" key={entry.id}>
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>

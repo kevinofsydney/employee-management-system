@@ -1,8 +1,14 @@
 import { headers } from "next/headers";
 import { Webhook } from "svix";
+import { z } from "zod";
 
 import { syncClerkUser } from "@/lib/auth";
 import { env } from "@/lib/env";
+
+const clerkWebhookPayload = z.object({
+  type: z.string(),
+  data: z.object({ id: z.string() })
+});
 
 export async function POST(request: Request) {
   if (!env.clerkWebhookSecret) {
@@ -20,11 +26,12 @@ export async function POST(request: Request) {
   }
 
   const webhook = new Webhook(env.clerkWebhookSecret);
-  const event = webhook.verify(payload, {
+  const verified = webhook.verify(payload, {
     "svix-id": svixId,
     "svix-timestamp": svixTimestamp,
     "svix-signature": svixSignature
-  }) as { type: string; data: { id: string } };
+  });
+  const event = clerkWebhookPayload.parse(verified);
 
   if (event.type === "user.created" || event.type === "user.updated") {
     await syncClerkUser(event.data.id);

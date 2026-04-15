@@ -11,7 +11,6 @@ export const env = {
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
-  defaultPayPeriodStartDay: Number(process.env.DEFAULT_PAY_PERIOD_START_DAY ?? "1"),
   inviteSigningSecret: required("INVITE_SIGNING_SECRET", process.env.INVITE_SIGNING_SECRET),
   googleDriveSharedDriveId: required("GOOGLE_DRIVE_SHARED_DRIVE_ID", process.env.GOOGLE_DRIVE_SHARED_DRIVE_ID),
   googleDriveRootFolderId: required("GOOGLE_DRIVE_ROOT_FOLDER_ID", process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID),

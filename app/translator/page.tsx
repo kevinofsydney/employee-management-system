@@ -29,11 +29,9 @@ export default async function TranslatorPage() {
     })
   ]);
 
-  const configuredLanguagePairs = user.languagePairs.map((entry: (typeof user.languagePairs)[number]) => entry.languagePair);
+  const configuredLanguagePairs = user.languagePairs.map((entry) => entry.languagePair);
   const onboarding = user.onboarding;
-  const documentMap = new Map<(typeof documents)[number]["type"], (typeof documents)[number]>(
-    documents.map((document: (typeof documents)[number]) => [document.type, document])
-  );
+  const documentMap = new Map(documents.map((document) => [document.type, document] as const));
 
   const profileDone = Boolean(onboarding?.profileCompletedAt);
   const docsDone = Boolean(onboarding?.documentsCompletedAt);
@@ -122,10 +120,10 @@ export default async function TranslatorPage() {
           <div className="field">
             <label>Language pairs</label>
             <div className="grid-auto">
-              {languagePairs.map((languagePair: (typeof languagePairs)[number]) => (
+              {languagePairs.map((languagePair) => (
                 <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" key={languagePair.id}>
                   <input
-                    defaultChecked={configuredLanguagePairs.some((entry: (typeof configuredLanguagePairs)[number]) => entry.id === languagePair.id)}
+                    defaultChecked={configuredLanguagePairs.some((entry) => entry.id === languagePair.id)}
                     name="languagePairIds"
                     type="checkbox"
                     value={languagePair.id}
@@ -247,7 +245,7 @@ export default async function TranslatorPage() {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((entry: (typeof entries)[number]) => (
+                {entries.map((entry) => (
                   <tr key={entry.id}>
                     <td>{entry.event.name}</td>
                     <td>{entry.date.toISOString().slice(0, 10)}</td>

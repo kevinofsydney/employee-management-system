@@ -22,7 +22,7 @@ const getDriveClient = () => {
 
 const sanitizeFileName = (value: string) => value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
 
-export const ensureTranslatorFolder = async (email: string) => {
+const ensureTranslatorFolder = async (email: string) => {
   const drive = getDriveClient();
   const folderName = `translator-${sanitizeFileName(email.toLowerCase())}`;
 
