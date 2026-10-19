@@ -16,6 +16,7 @@ const users: User[] = [
 const sheet = (id: string, start: string, end: string, status: Timesheet["status"], expenses: Timesheet["expenses"] = []): Timesheet => ({ id: `sheet-${id}`, shift_id: id, start_at: start, end_at: end, status, admin_note: "", expenses });
 const shifts: Shift[] = [
   { id: "demo-upcoming", user_id: users[0].id, user: users[0], start_at: at(1, 9), end_at: at(1, 17), note: "City walking tour", missing: false, timesheet: null },
+  ...[2, 3, 4, 5].map((day): Shift => ({ id: `demo-ava-${day}`, user_id: users[0].id, user: users[0], start_at: at(day, 9), end_at: at(day, 17), note: day === 3 ? "Harbour tour" : "City walking tour", missing: false, timesheet: null })),
   { id: "demo-submitted", user_id: users[0].id, user: users[0], start_at: at(-1, 9), end_at: at(-1, 17), note: "Harbour tour", missing: false, timesheet: sheet("demo-submitted", at(-1, 9), at(-1, 17, 15), "SUBMITTED", [{ id: "demo-expense", timesheet_id: "sheet-demo-submitted", incurred_on: today.minus({ days: 1 }).toISODate()!, description: "Taxi to venue", amount_cents: 2850, receipt_sent: 1 }]) },
   { id: "demo-missing", user_id: users[1].id, user: users[1], start_at: at(-3, 18), end_at: at(-2, 1), note: "Evening tour", missing: true, timesheet: null },
   { id: "demo-approved", user_id: users[1].id, user: users[1], start_at: at(-5, 10), end_at: at(-5, 16), note: "Private group", missing: false, timesheet: sheet("demo-approved", at(-5, 10), at(-5, 16), "APPROVED") },

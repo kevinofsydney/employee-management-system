@@ -157,6 +157,13 @@ function ReviewCard({ shift, call, act }: { shift: Shift; call: Caller; act: (jo
 
 function RosterPanel({ overview, call, act }: { overview: Overview; call: Caller; act: (job: () => Promise<unknown>, success?: string) => Promise<boolean> }) {
   const people = overview.users.filter((user) => user.role === "TRANSLATOR" && user.status === "ACTIVE");
+  const shiftsByPerson = new Map<string, Shift[]>();
+  for (const shift of overview.shifts) shiftsByPerson.set(shift.user_id, [...(shiftsByPerson.get(shift.user_id) ?? []), shift]);
+  const rosterGroups = [...shiftsByPerson].map(([id, shifts]) => ({
+    id,
+    name: (() => { const user = overview.users.find((person) => person.id === id) ?? shifts[0].user; return user ? fullName(user) : "Unknown translator"; })(),
+    shifts: shifts.sort((a, b) => a.start_at.localeCompare(b.start_at)),
+  })).sort((a, b) => a.name.localeCompare(b.name));
   const [userId, setUserId] = useState(people[0]?.id ?? "");
   const [startLocal, setStart] = useState("");
   const [endLocal, setEnd] = useState("");
@@ -169,7 +176,11 @@ function RosterPanel({ overview, call, act }: { overview: Overview; call: Caller
     <div className="form-grid"><label>Start<input type="datetime-local" step="900" value={startLocal} onChange={(e) => setStart(e.target.value)} required /></label><label>End<input type="datetime-local" step="900" value={endLocal} onChange={(e) => setEnd(e.target.value)} required /></label></div>
     <label>Note <span className="muted">(optional)</span><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Tour or meeting point" /></label>
     <div className="actions"><Button>{editing ? "Save shift" : "Add shift"}</Button>{editing && <Button type="button" secondary onClick={() => { setEditing(null); setStart(""); setEnd(""); setNote(""); }}>Cancel</Button>}</div></form>
-    <section><div className="section-head"><h2>All rostered shifts</h2><span className="count">{overview.shifts.length}</span></div><div className="card-list">{overview.shifts.map((shift) => <article className="card compact" key={shift.id}><div><strong>{shift.user ? fullName(shift.user) : "Translator"}</strong><p>{shiftTime(shift.start_at, shift.end_at)}</p>{shift.note && <p className="muted">{shift.note}</p>}</div><Status value={shift.timesheet?.status ?? (shift.missing ? "MISSING" : "ROSTERED")} /><div className="actions"><Button secondary onClick={() => edit(shift)}>Edit</Button>{!shift.timesheet && <button className="text-button danger" onClick={() => { if (window.confirm("Delete this shift?")) void act(() => call(`/api/admin/shifts/${shift.id}`, { method: "DELETE" }), "Shift deleted."); }}>Delete</button>}</div></article>)}</div></section>
+    <section><div className="section-head"><h2>Rostered shifts by translator</h2><span className="count">{overview.shifts.length}</span></div>
+      {rosterGroups.length === 0 && <div className="empty">No shifts have been rostered yet.</div>}
+      <div className="roster-groups">{rosterGroups.map((group) => <details className="roster-group" key={group.id}><summary><strong>{group.name}</strong><span className="roster-group-meta">{group.shifts.length} shift{group.shifts.length === 1 ? "" : "s"}</span><span className="roster-chevron" aria-hidden="true">⌄</span></summary>
+        <div className="roster-rows">{group.shifts.map((shift) => <article className="roster-row" key={shift.id}><div className="roster-row-time"><strong>{shiftTime(shift.start_at, shift.end_at)}</strong>{shift.note && <p className="muted">{shift.note}</p>}</div><Status value={shift.timesheet?.status ?? (shift.missing ? "MISSING" : "ROSTERED")} /><div className="actions"><Button secondary onClick={() => edit(shift)}>Edit</Button>{!shift.timesheet && <button className="text-button danger" onClick={() => { if (window.confirm("Delete this shift?")) void act(() => call(`/api/admin/shifts/${shift.id}`, { method: "DELETE" }), "Shift deleted."); }}>Delete</button>}</div></article>)}</div>
+      </details>)}</div></section>
   </div>;
 }
 
