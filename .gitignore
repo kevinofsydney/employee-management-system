@@ -1,8 +1,11 @@
 node_modules
 .npm-cache
 .next
+.wrangler
+.wrangler-config
 .env
 .env.local
+.dev.vars
 dist
 coverage
 *.log

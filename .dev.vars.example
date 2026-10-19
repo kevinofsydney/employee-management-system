@@ -1,0 +1,4 @@
+CLERK_SECRET_KEY=sk_test_replace_me
+CLERK_JWT_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+ADMIN_EMAILS=admin-one@example.com,admin-two@example.com
+APP_URL=http://localhost:5173

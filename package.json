@@ -1,35 +1,32 @@
 {
-  "name": "employee-management-system",
-  "version": "0.1.0",
+  "name": "translator-roster",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "node prisma/seed.mjs",
-    "test": "vitest run"
+    "dev": "node scripts/vite.mjs dev",
+    "build": "tsc --noEmit && node scripts/vite.mjs build",
+    "preview": "node scripts/vite.mjs preview",
+    "test": "node --test tests/*.test.mjs",
+    "db:migrate:local": "wrangler d1 migrations apply translator-roster --local",
+    "db:migrate:remote": "wrangler d1 migrations apply translator-roster --remote",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.17.0",
-    "@prisma/client": "^6.6.0",
-    "clsx": "^2.1.1",
-    "csv-stringify": "^6.5.2",
-    "googleapis": "^148.0.0",
-    "next": "^15.2.4",
+    "@clerk/react": "^6.17.8",
+    "jose": "^6.2.12",
+    "luxon": "^3.7.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "svix": "^1.62.0",
-    "zod": "^3.24.2"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.13.14",
-    "@types/react": "^19.0.12",
-    "@types/react-dom": "^19.0.4",
-    "prisma": "^6.6.0",
+    "@cloudflare/vite-plugin": "^1.64.0",
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/luxon": "^3.7.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vite": "^7.0.0",
+    "wrangler": "^4.0.0"
   }
 }
