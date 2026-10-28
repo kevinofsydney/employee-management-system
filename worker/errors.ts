@@ -105,3 +105,39 @@ export async function logFailure(env: Env, input: Parameters<typeof buildErrorRe
   await recordError(env, record);
   return record;
 }
+
+export const DEFAULT_RETENTION_DAYS = 90;
+
+// Retention is configuration, not a hard limit: a bad or missing value falls back to 90 days
+// rather than deleting the whole log.
+export function retentionDays(value?: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_RETENTION_DAYS;
+  return Math.min(Math.trunc(parsed), 3650);
+}
+
+export function retentionCutoff(now: Date, days: number): string {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+// Runs on the monthly cron. Deleting in bounded chunks keeps each statement small enough for D1
+// and lets a large first prune finish across a few runs instead of timing out.
+export async function pruneErrorLogs(env: Env, now: Date = new Date()): Promise<{ deleted: number; cutoff: string }> {
+  const days = retentionDays(env.ERROR_LOG_RETENTION_DAYS);
+  const cutoff = retentionCutoff(now, days);
+  let deleted = 0;
+  try {
+    for (let pass = 0; pass < 20; pass += 1) {
+      const result = await env.DB.prepare(
+        "DELETE FROM error_logs WHERE id IN (SELECT id FROM error_logs WHERE created_at < ? LIMIT 500)"
+      ).bind(cutoff).run();
+      const changed = Number(result.meta?.changes ?? 0);
+      deleted += changed;
+      if (changed < 500) break;
+    }
+    console.log(JSON.stringify({ event: "error_logs_pruned", deleted, cutoff, retention_days: days }));
+  } catch (cause) {
+    console.error("error_logs prune failed", cause instanceof Error ? cause.message : cause);
+  }
+  return { deleted, cutoff };
+}

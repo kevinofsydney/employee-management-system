@@ -90,3 +90,5 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```
 
 Query parameters: `since` (ISO timestamp), `level` (`warn` or `error`), `status` (three-digit code), `limit` (1–200, default 50). Each row is self-contained, so an agent can group by `code` + `path` and read `message`/`stack` to find the cause. `wrangler tail` also prints one JSON line per logged failure with the same `request_id` for live debugging.
+
+**Retention.** A cron trigger (`0 3 1 * *` in `wrangler.jsonc`, first of the month at 03:00 UTC) calls the Worker's `scheduled` handler, which deletes rows older than the retention window in chunks of 500 until nothing is left to delete. The default is **90 days**; set `ERROR_LOG_RETENTION_DAYS` as a Worker secret or variable to change it (clamped to 1–3650, and a bad or missing value falls back to 90 rather than wiping the log). The prune logs one JSON line — `{"event":"error_logs_pruned","deleted":N,"cutoff":"…"}` — and never throws, so a database problem cannot fail the scheduled run.

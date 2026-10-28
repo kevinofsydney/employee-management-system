@@ -3,7 +3,7 @@ import type { D1PreparedStatement } from "@cloudflare/workers-types";
 import { hoursByKind, shiftWeek } from "../src/shared/time";
 import { currentUser, HttpError, requireActive, requireAdmin } from "./auth";
 import { audit, shiftViews } from "./data";
-import { logFailure } from "./errors";
+import { logFailure, pruneErrorLogs } from "./errors";
 import { exportFile } from "./export";
 import type { Env, Expense, Shift, Timesheet, User } from "./types";
 import { bodyObject, expenses, range, string } from "./validation";
@@ -243,5 +243,10 @@ export default {
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Request-Id": requestId }
       });
     }
+  },
+
+  // Monthly cron (see wrangler.jsonc): drop error_logs older than the retention window.
+  async scheduled(_event: unknown, env: Env, ctx: { waitUntil: (promise: Promise<unknown>) => void }): Promise<void> {
+    ctx.waitUntil(pruneErrorLogs(env));
   }
 };
