@@ -104,7 +104,7 @@ function ShiftCard({ shift, editing, onEdit, onCancel, onSave }: { shift: Shift;
   </article>;
 }
 
-export function AdminDashboard({ call, getToken }: { call: Caller; getToken: () => Promise<string | null> }) {
+export function AdminDashboard({ call, getToken, downloadFile }: { call: Caller; getToken: () => Promise<string | null>; downloadFile?: (url: string, filename: string) => Promise<void> }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tab, setTab] = useState<"review" | "roster" | "people" | "export">("review");
   const [error, setError] = useState("");
@@ -122,7 +122,7 @@ export function AdminDashboard({ call, getToken }: { call: Caller; getToken: () 
     {overview && tab === "review" && <ReviewPanel overview={overview} call={call} act={act} />}
     {overview && tab === "roster" && <RosterPanel overview={overview} call={call} act={act} />}
     {overview && tab === "people" && <PeoplePanel overview={overview} call={call} act={act} />}
-    {overview && tab === "export" && <ExportPanel overview={overview} call={call} getToken={getToken} act={act} />}
+    {overview && tab === "export" && <ExportPanel overview={overview} call={call} getToken={getToken} act={act} downloadFile={downloadFile} />}
   </div>;
 }
 
@@ -201,7 +201,7 @@ function PersonCard({ user, call, act }: { user: User; call: Caller; act: (job: 
   </article>;
 }
 
-function ExportPanel({ overview, call, getToken, act }: { overview: Overview; call: Caller; getToken: () => Promise<string | null>; act: (job: () => Promise<unknown>, success?: string) => Promise<boolean> }) {
+function ExportPanel({ overview, call, getToken, act, downloadFile }: { overview: Overview; call: Caller; getToken: () => Promise<string | null>; act: (job: () => Promise<unknown>, success?: string) => Promise<boolean>; downloadFile?: (url: string, filename: string) => Promise<void> }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [standard, setStandard] = useState(overview.settings.standard_payroll_category ?? "");
@@ -209,7 +209,7 @@ function ExportPanel({ overview, call, getToken, act }: { overview: Overview; ca
   const [error, setError] = useState("");
   async function get(kind: "review" | "myob" | "expenses") {
     setError("");
-    try { const query = new URLSearchParams({ kind, ...(from ? { from } : {}), ...(to ? { to } : {}) }); await download(getToken, `/api/admin/export?${query}`, kind === "myob" ? "myob-timesheets.txt" : kind === "expenses" ? "approved-expenses.csv" : "approved-hours.csv"); }
+    try { const query = new URLSearchParams({ kind, ...(from ? { from } : {}), ...(to ? { to } : {}) }); const filename = kind === "myob" ? "myob-timesheets.txt" : kind === "expenses" ? "approved-expenses.csv" : "approved-hours.csv"; const url = `/api/admin/export?${query}`; if (downloadFile) await downloadFile(url, filename); else await download(getToken, url, filename); }
     catch (cause) { setError((cause as Error).message); }
   }
   return <div className="page-stack"><div className="card form-stack"><div><h2>Export approved work</h2><p className="muted">Choose a Sydney date range. Only approved timesheets and their expenses are included.</p></div><div className="form-grid"><label>From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label><label>To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label></div>{error && <Notice tone="error">{error}</Notice>}

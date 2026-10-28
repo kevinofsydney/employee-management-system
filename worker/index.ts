@@ -117,6 +117,8 @@ async function adminShift(request: Request, env: Env, actor: User, id?: string):
   }
   const existing = await env.DB.prepare("SELECT * FROM shifts WHERE id = ?").bind(id).first<Shift>();
   if (!existing) throw new HttpError(404, "Shift not found.");
+  const approvedSheet = await env.DB.prepare("SELECT id FROM timesheets WHERE shift_id = ? AND status = 'APPROVED'").bind(id).first();
+  if (approvedSheet) throw new HttpError(409, "This shift's timesheet is approved. Reopen the timesheet before changing the roster.");
   await env.DB.prepare("UPDATE shifts SET start_at = ?, end_at = ?, note = ?, updated_at = ? WHERE id = ?")
     .bind(startAt, endAt, note, now, id).run();
   await audit(env, actor.id, "SHIFT_UPDATED", "Shift", id);
@@ -144,7 +146,7 @@ async function adminTimesheet(request: Request, env: Env, actor: User, id: strin
     const { startAt, endAt } = range(body);
     const rows = expenses(body.expenses ?? []);
     checkExpenseDates(rows, startAt, endAt);
-    await replaceExpenses(env, id, rows, env.DB.prepare("UPDATE timesheets SET start_at = ?, end_at = ?, status = 'SUBMITTED', updated_at = ? WHERE id = ?")
+    await replaceExpenses(env, id, rows, env.DB.prepare("UPDATE timesheets SET start_at = ?, end_at = ?, status = 'SUBMITTED', reviewed_at = NULL, reviewed_by = NULL, updated_at = ? WHERE id = ?")
       .bind(startAt, endAt, now, id));
   } else {
     throw new HttpError(400, "Invalid action.");
