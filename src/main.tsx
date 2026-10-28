@@ -5,7 +5,9 @@ import App from "./App";
 import "./styles.css";
 
 const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-const demo = import.meta.env.DEV && ["localhost", "127.0.0.1"].includes(location.hostname) && new URLSearchParams(location.search).has("demo");
+// Demo mode runs in local development, or in any build made with VITE_DEMO=true for a hosted
+// review. It never talks to the API or the database.
+const demo = new URLSearchParams(location.search).has("demo") && (import.meta.env.DEV || import.meta.env.VITE_DEMO === "true");
 const root = createRoot(document.getElementById("root")!);
 if (demo) {
   import("./demo").then(({ default: Demo }) => root.render(<React.StrictMode><Demo /></React.StrictMode>));

@@ -6,6 +6,8 @@ export interface Env {
   CLERK_JWT_KEY: string;
   ADMIN_EMAILS: string;
   APP_URL: string;
+  /** Days of error_logs history to keep. Defaults to 90 when unset or invalid. */
+  ERROR_LOG_RETENTION_DAYS?: string;
 }
 
 export type User = {
