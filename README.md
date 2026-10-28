@@ -64,7 +64,7 @@ The **expenses CSV** is a reimbursement review file, not a MYOB timesheet import
 
 ## Checks
 
-Run `npm test` for session-token checks, Sydney overnight, Sunday, daylight-saving and missing-timesheet calculations, and the three export formats (CSV quoting, formula-injection neutralising, date filtering, the MYOB row shape and its card-ID and category rules).
+Run `npm test` for session-token checks, Sydney overnight, Sunday, daylight-saving and missing-timesheet calculations, the expense-week rule, the three export formats (CSV quoting, formula-injection neutralising, date filtering, the MYOB row shape and its card-ID and category rules), and error-record severity, redaction and truncation.
 
 Run `npm run build` for TypeScript and production bundling. `npm run check:config` fails if `wrangler.jsonc` still holds the D1 placeholder or the Clerk publishable key is unset, so a deploy cannot silently ship a broken Worker. `npm audit --cache .npm-cache` checks installed packages; the remaining advisories are all in the Wrangler/Miniflare build tooling and are not shipped in the Worker bundle.
 
@@ -72,4 +72,21 @@ Run `npm run build` for TypeScript and production bundling. `npm run check:confi
 
 - A roster shift cannot be edited while its timesheet is approved; reopen the timesheet first. Deleting a shift has always been blocked once a timesheet exists.
 - An admin "Correct" resets the timesheet to submitted and clears the previous reviewer and review time.
-- Expense dates must fall on a day the shift was worked, in Sydney time. A receipt dated before or after the shift is rejected.
+- Expense dates must fall in the Monday–Sunday week of the shift, in Sydney time, so a taxi or parking receipt dated earlier in the week is accepted but one from a different week is rejected.
+
+## Error log
+
+Every failure that matters is written to the `error_logs` table (migration `0002_error_logs.sql`), so an agent or a person can audit what happened without replaying a request.
+
+- **What is logged:** every 5xx, and every 4xx except `401`, `403` and `404` — a rejected timesheet or an invalid export range is exactly the kind of thing worth auditing, while "not signed in" and "not found" are noise.
+- **What a row holds:** timestamp, level (`warn`/`error`), status, method, path with query string, error name, message, stack, the acting user's id, email, role and account status, a `request_id`, and a small JSON detail blob.
+- **Safety:** messages and stacks are truncated (1,000 / 4,000 characters) and bearer tokens, Clerk keys, `sk-`/`pk-`/`rk-` keys and JWTs are redacted before storage. The insert is best-effort and never blocks or changes a response.
+- **Correlation:** a failed response carries `X-Request-Id` in the header and `requestId` in the body; the same value is stored on the row.
+- **Reading it:** as an admin, `GET /api/admin/errors` returns the newest first.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "https://<worker>/api/admin/errors?since=2026-10-28T00:00:00Z&level=error&limit=50"
+```
+
+Query parameters: `since` (ISO timestamp), `level` (`warn` or `error`), `status` (three-digit code), `limit` (1–200, default 50). Each row is self-contained, so an agent can group by `code` + `path` and read `message`/`stack` to find the cause. `wrangler tail` also prints one JSON line per logged failure with the same `request_id` for live debugging.

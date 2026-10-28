@@ -62,3 +62,11 @@ export function isMissing(endAt: string, now: DateTime = DateTime.now()): boolea
   const cutoff = DateTime.fromISO(endAt, { zone: "utc" }).setZone(ZONE).plus({ days: 1 }).startOf("day").plus({ hours: 9 });
   return now.setZone(ZONE) >= cutoff;
 }
+
+// The Monday–Sunday week containing a shift, in Sydney dates. Expense receipts may be dated
+// anywhere in that week: translators often pay for a taxi or parking before the shift starts.
+export function shiftWeek(startAt: string): { start: string; end: string } {
+  const start = DateTime.fromISO(startAt, { zone: "utc" }).setZone(ZONE).startOf("day");
+  const monday = start.minus({ days: start.weekday - 1 });
+  return { start: monday.toISODate()!, end: monday.plus({ days: 6 }).toISODate()! };
+}

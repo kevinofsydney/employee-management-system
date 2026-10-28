@@ -1,8 +1,9 @@
 import { DateTime } from "luxon";
 import type { D1PreparedStatement } from "@cloudflare/workers-types";
-import { hoursByKind, splitWork } from "../src/shared/time";
+import { hoursByKind, shiftWeek } from "../src/shared/time";
 import { currentUser, HttpError, requireActive, requireAdmin } from "./auth";
 import { audit, shiftViews } from "./data";
+import { logFailure } from "./errors";
 import { exportFile } from "./export";
 import type { Env, Expense, Shift, Timesheet, User } from "./types";
 import { bodyObject, expenses, range, string } from "./validation";
@@ -22,9 +23,13 @@ async function replaceExpenses(env: Env, timesheetId: string, rows: ReturnType<t
   await env.DB.batch(statements);
 }
 
-function checkExpenseDates(rows: ReturnType<typeof expenses>, startAt: string, endAt: string) {
-  const dates = new Set(splitWork(startAt, endAt).map((segment) => segment.date));
-  for (const row of rows) if (!dates.has(row.incurred_on)) throw new HttpError(400, "Expense dates must fall on the worked shift.");
+function checkExpenseDates(rows: ReturnType<typeof expenses>, startAt: string) {
+  const week = shiftWeek(startAt);
+  for (const row of rows) {
+    if (row.incurred_on < week.start || row.incurred_on > week.end) {
+      throw new HttpError(400, `Expense dates must fall in the week of the shift (${week.start} to ${week.end}).`);
+    }
+  }
 }
 
 async function myTimesheet(request: Request, env: Env, user: User): Promise<Response> {
@@ -39,7 +44,7 @@ async function myTimesheet(request: Request, env: Env, user: User): Promise<Resp
     throw new HttpError(400, "Actual times must be close to the rostered shift.");
   }
   const rows = expenses(body.expenses ?? []);
-  checkExpenseDates(rows, startAt, endAt);
+  checkExpenseDates(rows, startAt);
   const existing = await env.DB.prepare("SELECT * FROM timesheets WHERE shift_id = ?").bind(shiftId).first<Timesheet>();
   if (existing?.status === "APPROVED") throw new HttpError(409, "This timesheet is approved. Ask an admin to reopen it for a correction.");
   if (new Date(shift.start_at) > new Date()) throw new HttpError(409, "You can enter a timesheet once the shift has started.");
@@ -145,7 +150,7 @@ async function adminTimesheet(request: Request, env: Env, actor: User, id: strin
     if (sheet.status === "APPROVED") throw new HttpError(409, "Reopen this timesheet before editing it.");
     const { startAt, endAt } = range(body);
     const rows = expenses(body.expenses ?? []);
-    checkExpenseDates(rows, startAt, endAt);
+    checkExpenseDates(rows, startAt);
     await replaceExpenses(env, id, rows, env.DB.prepare("UPDATE timesheets SET start_at = ?, end_at = ?, status = 'SUBMITTED', reviewed_at = NULL, reviewed_by = NULL, updated_at = ? WHERE id = ?")
       .bind(startAt, endAt, now, id));
   } else {
@@ -167,10 +172,30 @@ async function settings(request: Request, env: Env, actor: User): Promise<Respon
   return reply({ ok: true });
 }
 
-async function handle(request: Request, env: Env): Promise<Response> {
+async function adminErrors(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const rawLimit = Number(url.searchParams.get("limit") ?? 50);
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? Math.trunc(rawLimit) : 50, 1), 200);
+  const since = url.searchParams.get("since") ?? "";
+  const level = url.searchParams.get("level") ?? "";
+  const status = url.searchParams.get("status") ?? "";
+  if (since && Number.isNaN(Date.parse(since))) throw new HttpError(400, "since must be an ISO timestamp.");
+  if (status && !/^\d{3}$/.test(status)) throw new HttpError(400, "status must be a three-digit code.");
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  if (since) { where.push("created_at >= ?"); binds.push(since); }
+  if (level === "warn" || level === "error") { where.push("level = ?"); binds.push(level); }
+  if (status) { where.push("status = ?"); binds.push(Number(status)); }
+  const sql = `SELECT * FROM error_logs ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC LIMIT ?`;
+  const rows = await env.DB.prepare(sql).bind(...binds, limit).all();
+  return reply({ errors: rows.results, limit, filters: { since, level, status } });
+}
+
+async function handle(request: Request, env: Env, context: { user?: User }): Promise<Response> {
   const path = new URL(request.url).pathname;
   if (!path.startsWith("/api/")) return new Response("Not found", { status: 404 });
   const user = await currentUser(request, env);
+  context.user = user;
   if (path === "/api/me" && request.method === "GET") return reply({ user });
   if (path === "/api/me" && request.method === "PATCH") {
     const body = await bodyObject(request);
@@ -190,6 +215,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
   if (!path.startsWith("/api/admin/")) throw new HttpError(404, "Not found.");
   requireAdmin(user);
   if (path === "/api/admin/overview" && request.method === "GET") return adminOverview(env);
+  if (path === "/api/admin/errors" && request.method === "GET") return adminErrors(request, env);
   if (path === "/api/admin/export" && request.method === "GET") return exportFile(request, env, user);
   if (path === "/api/admin/settings" && request.method === "PATCH") return settings(request, env, user);
   const userMatch = /^\/api\/admin\/users\/([^/]+)$/.exec(path);
@@ -204,11 +230,18 @@ async function handle(request: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    try { return await handle(request, env); }
-    catch (error) {
-      if (error instanceof HttpError) return reply({ error: error.message }, error.status);
-      console.error(error);
-      return reply({ error: "Something went wrong. Please try again." }, 500);
+    const requestId = crypto.randomUUID();
+    const context: { user?: User } = {};
+    try {
+      return await handle(request, env, context);
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 500;
+      await logFailure(env, { request, error, status, requestId, user: context.user ?? null });
+      const message = status >= 500 ? "Something went wrong. Please try again." : (error as Error).message;
+      return new Response(JSON.stringify({ error: message, requestId }), {
+        status,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Request-Id": requestId }
+      });
     }
   }
 };

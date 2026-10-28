@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import { useCallback, useState } from "react";
 import { AdminDashboard, TranslatorDashboard } from "./App";
 import { buildExport, exportFileInfo, isExportKind } from "./shared/export";
-import { ZONE, isMissing, localToUtc, validateRange } from "./shared/time";
+import { ZONE, isMissing, localToUtc, shiftWeek, validateRange } from "./shared/time";
 import type { Overview, Shift, Timesheet, User } from "./types";
 
 // Local preview: a complete, interactive copy of the app backed by memory instead of the API.
@@ -151,6 +151,12 @@ function applyTimesheet(shiftId: string, body: { startLocal: string; endLocal: s
     counter += 1;
     return { id: id(`exp-${counter}-${index}`), timesheet_id: target.timesheet?.id ?? id(`sheet-${counter}`), incurred_on: incurred, description: String(row.description).trim(), amount_cents: cents, receipt_sent: row.receiptSent ? 1 : 0 };
   });
+  const week = shiftWeek(startAt);
+  for (const item of expenses) {
+    if (item.incurred_on < week.start || item.incurred_on > week.end) {
+      throw new Error(`Expense dates must fall in the week of the shift (${week.start} to ${week.end}).`);
+    }
+  }
   if (target.timesheet?.status === "APPROVED") throw new Error("This timesheet is approved. Ask an admin to reopen it for a correction.");
   if (target.timesheet) {
     target.timesheet = { ...target.timesheet, start_at: startAt, end_at: endAt, status: "SUBMITTED", admin_note: "", expenses };
