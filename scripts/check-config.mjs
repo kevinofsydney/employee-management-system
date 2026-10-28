@@ -41,8 +41,25 @@ if (!existsSync(devVars)) {
   notes.push(".dev.vars is absent, so local development has no Clerk secret key, JWT key or ADMIN_EMAILS.");
 } else {
   const vars = readFileSync(devVars, "utf8");
-  for (const key of ["CLERK_SECRET_KEY", "CLERK_JWT_KEY", "ADMIN_EMAILS"]) {
-    if (!new RegExp(`^${key}\\s*=\\s*\\S`, "m").test(vars)) notes.push(`.dev.vars has no value for ${key}.`);
+  for (const key of ["CLERK_SECRET_KEY", "CLERK_JWT_KEY"]) {
+    if (!new RegExp(`^${key}\\s*=\\s*\\S`, "m").test(vars)) notes.push(`.dev.vars has no value for ${key}, so sign-in will fail locally.`);
+  }
+
+  // ADMIN_EMAILS is the whole authorisation model: admins are auto-activated by matching it, and
+  // everyone else waits for one. The app expects exactly two, so a typo here locks the wrong
+  // person out or lets a third admin in silently.
+  const adminLine = vars.match(/^ADMIN_EMAILS\s*=\s*(.*)$/m);
+  const legalEmail = /^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/;
+  if (!adminLine || !adminLine[1].trim()) {
+    problems.push(".dev.vars has no ADMIN_EMAILS value. Set the two admin email addresses, comma-separated.");
+  } else {
+    const admins = adminLine[1].split(",").map((part) => part.trim()).filter(Boolean);
+    const invalid = admins.filter((email) => !legalEmail.test(email));
+    let adminsOk = true;
+    if (invalid.length) { problems.push(`ADMIN_EMAILS contains invalid addresses: ${invalid.join(", ")}.`); adminsOk = false; }
+    if (admins.length !== 2) { problems.push(`ADMIN_EMAILS should list exactly two admins; found ${admins.length}.`); adminsOk = false; }
+    if (new Set(admins.map((email) => email.toLowerCase())).size !== admins.length) { problems.push("ADMIN_EMAILS lists the same address twice."); adminsOk = false; }
+    if (adminsOk) notes.push(`ADMIN_EMAILS: ${admins.length} admins (${admins.join(", ")}) — both must match the Clerk accounts exactly.`);
   }
 }
 

@@ -66,7 +66,7 @@ The **expenses CSV** is a reimbursement review file, not a MYOB timesheet import
 
 Run `npm test` for session-token checks, Sydney overnight, Sunday, daylight-saving and missing-timesheet calculations, the expense-week rule, the three export formats (CSV quoting, formula-injection neutralising, date filtering, the MYOB row shape and its card-ID and category rules), and error-record severity, redaction and truncation.
 
-Run `npm run build` for TypeScript and production bundling. `npm run check:config` fails if `wrangler.jsonc` still holds the D1 placeholder or the Clerk publishable key is unset, so a deploy cannot silently ship a broken Worker. `npm audit --cache .npm-cache` checks installed packages; the remaining advisories are all in the Wrangler/Miniflare build tooling and are not shipped in the Worker bundle.
+Run `npm run build` for TypeScript and production bundling. `npm run check:config` fails if `wrangler.jsonc` still holds the D1 placeholder, the Clerk publishable key is unset, or the local `ADMIN_EMAILS` is missing, malformed, duplicated or not exactly two addresses — that list is the whole authorisation model, so a typo there locks out the wrong person. `npm audit --cache .npm-cache` checks installed packages; the remaining advisories are all in the Wrangler/Miniflare build tooling and are not shipped in the Worker bundle.
 
 ## Behaviour notes
 
