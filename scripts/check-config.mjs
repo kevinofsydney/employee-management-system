@@ -49,11 +49,13 @@ if (!existsSync(devVars)) {
   // everyone else waits for one. The app expects exactly two, so a typo here locks the wrong
   // person out or lets a third admin in silently.
   const adminLine = vars.match(/^ADMIN_EMAILS\s*=\s*(.*)$/m);
-  const legalEmail = /^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/;
-  if (!adminLine || !adminLine[1].trim()) {
+  // Wrangler strips surrounding quotes from .dev.vars values, so check the value it will see.
+  const adminValue = adminLine ? adminLine[1].trim().replace(/^(["'])(.*)\1$/, "$2") : "";
+  const legalEmail = /^[^@\s,"']+@[^@\s,"']+\.[^@\s,"']+$/;
+  if (!adminValue.trim()) {
     problems.push(".dev.vars has no ADMIN_EMAILS value. Set the two admin email addresses, comma-separated.");
   } else {
-    const admins = adminLine[1].split(",").map((part) => part.trim()).filter(Boolean);
+    const admins = adminValue.split(",").map((part) => part.trim()).filter(Boolean);
     const invalid = admins.filter((email) => !legalEmail.test(email));
     let adminsOk = true;
     if (invalid.length) { problems.push(`ADMIN_EMAILS contains invalid addresses: ${invalid.join(", ")}.`); adminsOk = false; }
