@@ -4,6 +4,8 @@
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "not_found_handling": "single-page-application" },
+  "routes": [{ "pattern": "timesheets.courant.live", "custom_domain": true }],
+  "workers_dev": false,
   "triggers": { "crons": ["0 3 1 * *"] },
   "d1_databases": [
     {
