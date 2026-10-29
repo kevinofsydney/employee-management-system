@@ -9,7 +9,7 @@
     {
       "binding": "DB",
       "database_name": "translator-roster",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "b18bb6b5-b3d0-42d0-9e83-1837e63a656c"
     }
   ]
 }
