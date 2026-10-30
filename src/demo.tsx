@@ -269,9 +269,9 @@ export default function Demo() {
       }
       if (method === "POST" && path === "/api/admin/roster-import") {
         const result = { created: 0, duplicates: 0, peopleAdded: 0, peopleActivated: 0, skipped: [] as { email: string; reason: string }[] };
-        for (const row of (body.shifts ?? []) as { email: string; name: string; startLocal: string; endLocal: string; note: string }[]) {
-          const email = row.email.toLowerCase();
-          let owner = users.find((item) => item.email.toLowerCase() === email);
+        for (const row of (body.shifts ?? []) as { userId?: string; email?: string; name: string; startLocal: string; endLocal: string; note: string }[]) {
+          let owner = row.userId ? users.find((item) => item.id === row.userId) : users.find((item) => item.email.toLowerCase() === row.email?.toLowerCase());
+          const email = owner?.email ?? row.email?.toLowerCase() ?? "";
           if (owner?.role === "ADMIN") { result.skipped.push({ email, reason: "is an admin account" }); continue; }
           if (owner?.status === "INACTIVE") { result.skipped.push({ email, reason: "is deactivated. Reactivate them under People first" }); continue; }
           if (!owner) {

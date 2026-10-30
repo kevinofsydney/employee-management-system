@@ -23,6 +23,8 @@ export type RosterRow = {
   problem: string;
   /** True when only the date or time is unreadable, so entering times by hand makes the row importable. */
   fixable: boolean;
+  /** Set when the email can't be trusted to identify someone; the admin must choose an existing person. */
+  emailProblem: string;
 };
 
 export type RosterScan = { rows: RosterRow[]; sheetsUsed: string[]; sheetsSkipped: string[] };
@@ -142,7 +144,16 @@ function tableTitle(rows: string[][], headerRow: number): string {
 }
 
 /** One filled roster cell before any checks, from the spreadsheet reader or the AI reader. */
-export type RosterEntry = Pick<RosterRow, "sheet" | "city" | "role" | "name" | "email" | "dateLabel" | "timeLabel"> & { status: string };
+export type RosterEntry = Pick<RosterRow, "sheet" | "city" | "role" | "name" | "email" | "dateLabel" | "timeLabel"> & {
+  status: string;
+  /** Set by the AI reader when the email it returned isn't written anywhere in the file. */
+  emailNotInFile?: boolean;
+};
+
+/** Lower-cased name without punctuation, for spotting one person listed under two emails. */
+export function nameKey(name: string): string {
+  return clean(name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " "));
+}
 
 type ScanOptions = { today?: DateTime; year?: number };
 
@@ -150,17 +161,19 @@ type ScanOptions = { today?: DateTime; year?: number };
 export function checkEntries(entries: RosterEntry[], options: ScanOptions = {}): RosterRow[] {
   const today = (options.today ?? DateTime.now()).setZone(ZONE).startOf("day");
   const seen = new Set<string>();
-  return entries.map(({ status, ...source }) => {
+  return entries.map(({ status, emailNotInFile, ...source }) => {
     const name = clean(source.name);
     const email = clean(source.email).toLowerCase();
-    const entry: RosterRow = { ...source, name, email, startLocal: "", endLocal: "", startAt: "", endAt: "", problem: "", fixable: false };
+    const entry: RosterRow = { ...source, name, email, startLocal: "", endLocal: "", startAt: "", endAt: "", problem: "", fixable: false, emailProblem: "" };
     const parts = parseDateLabel(source.dateLabel);
     const date = parts && resolveDate(parts, today, options.year);
     const times = parseTimeRange(source.timeLabel);
     if (status && !/confirm/i.test(status)) entry.problem = `Status is “${clean(status)}”`;
     else if (!name) entry.problem = "No name";
-    else if (!EMAIL.test(email)) entry.problem = email ? "Email address looks wrong" : "No email address";
     else {
+      // An untrusted email doesn't stop the row: the admin can still assign it to an existing person.
+      if (emailNotInFile) entry.emailProblem = "This email isn't in the file";
+      else if (!EMAIL.test(email)) entry.emailProblem = email ? "Email address looks wrong" : "No email address";
       entry.fixable = true;
       if (!date) entry.problem = `Couldn't read the date “${source.dateLabel}”`;
       else if (!times) entry.problem = `Couldn't read the time “${source.timeLabel}”`;
@@ -173,7 +186,7 @@ export function checkEntries(entries: RosterEntry[], options: ScanOptions = {}):
           entry.startAt = range.startAt;
           entry.endAt = range.endAt;
           entry.fixable = false;
-          const key = `${email}|${range.startAt}|${range.endAt}`;
+          const key = `${email || nameKey(name)}|${range.startAt}|${range.endAt}`;
           if (seen.has(key)) entry.problem = "Listed twice in this file";
           seen.add(key);
         } catch (error) {

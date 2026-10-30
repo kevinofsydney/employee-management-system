@@ -56,13 +56,18 @@ export async function readRosterWithAi(request: Request, env: Env, actor: User):
     throw new HttpError(502, "The AI reader's answer couldn't be read. Try again, or enter the shifts by hand.");
   }
   if (!Array.isArray(entries)) throw new HttpError(502, "The AI reader didn't find any shifts in this file.");
+  // A model can invent or garble an email. Only addresses written in the file itself can create a new
+  // person; any other row must be assigned to someone already in the system before it's imported.
+  const source = text.toLowerCase();
   const rows: RosterEntry[] = entries.slice(0, MAX_ENTRIES).filter((item) => item && typeof item === "object").map((item) => {
     const row = item as Record<string, unknown>;
     const start = field(row.start, 10);
     const end = field(row.end, 10);
+    const email = field(row.email, 254);
     return {
-      sheet: field(row.sheet, 80), city: field(row.city, 80), role: field(row.role, 80), name: field(row.name, 80), email: field(row.email, 254),
-      status: field(row.status, 40), dateLabel: field(row.date, 40), timeLabel: start || end ? `${start} - ${end}` : ""
+      sheet: field(row.sheet, 80), city: field(row.city, 80), role: field(row.role, 80), name: field(row.name, 80), email,
+      status: field(row.status, 40), dateLabel: field(row.date, 40), timeLabel: start || end ? `${start} - ${end}` : "",
+      emailNotInFile: email !== "" && !source.includes(email.toLowerCase())
     };
   });
   await audit(env, actor.id, "ROSTER_READ_WITH_AI", "Roster", crypto.randomUUID(), { fileName, characters: text.length, entries: rows.length });

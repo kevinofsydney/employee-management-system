@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { strToU8, zipSync } from "fflate";
 import { DateTime } from "luxon";
-import { eventFromFileName, parseDateLabel, parseTimeRange, rosterNote, scanRoster, splitName } from "../src/shared/roster.ts";
+import { checkEntries, eventFromFileName, nameKey, parseDateLabel, parseTimeRange, rosterNote, scanRoster, splitName } from "../src/shared/roster.ts";
 import { readXlsx } from "../src/shared/xlsx.ts";
 
 const today = DateTime.fromISO("2026-10-30", { zone: "Australia/Sydney" });
@@ -35,7 +35,7 @@ describe("roster import", () => {
     const scan = scanRoster(sheets, { today });
     assert.deepEqual(scan.sheetsUsed, ["MELBOURNE", "SYDNEY"]);
     assert.deepEqual(scan.sheetsSkipped, ["Sheet11", "Sheet12"]);
-    const ok = scan.rows.filter((row) => !row.problem);
+    const ok = scan.rows.filter((row) => !row.problem && !row.emailProblem);
     assert.deepEqual(ok.map(({ city, role, email, startLocal, endLocal }) => ({ city, role, email, startLocal, endLocal })), [
       { city: "Melbourne", role: "Lighting", email: "ada@example.com", startLocal: "2026-09-22T11:00", endLocal: "2026-09-22T23:30" },
       { city: "Melbourne", role: "Sound (Monitor)", email: "bo@example.com", startLocal: "2026-09-22T15:00", endLocal: "2026-09-22T23:30" },
@@ -43,11 +43,21 @@ describe("roster import", () => {
       { city: "Sydney", role: "Lighting", email: "ada@example.com", startLocal: "2026-09-26T22:00", endLocal: "2026-09-27T02:00" }
     ]);
     assert.equal(ok[0].startAt, "2026-09-22T01:00:00Z");
-    assert.deepEqual(scan.rows.filter((row) => row.problem).map((row) => [row.name, row.problem]), [
-      ["Cy Tan", "Status is “Tentative”"],
-      ["Di Ng", "Couldn't read the time “TBC”"],
-      ["Ed Wu", "Email address looks wrong"]
+    assert.deepEqual(scan.rows.filter((row) => row.problem).map((row) => [row.name, row.problem, row.fixable]), [
+      ["Cy Tan", "Status is “Tentative”", false],
+      ["Di Ng", "Couldn't read the time “TBC”", true]
     ]);
+    // A bad email keeps its times so the admin can assign the row to an existing person.
+    const ed = scan.rows.find((row) => row.name === "Ed Wu");
+    assert.deepEqual([ed.problem, ed.emailProblem, ed.startLocal], ["", "Email address looks wrong", "2026-09-25T11:00"]);
+  });
+
+  it("flags AI-read emails that aren't in the file", () => {
+    const entry = { sheet: "A", city: "", role: "", name: "Ada Lim", status: "", dateLabel: "2026-09-22", timeLabel: "11:00 - 23:30" };
+    const [invented, missing] = checkEntries([{ ...entry, email: "ada.lim@example.com", emailNotInFile: true }, { ...entry, email: "" }], { today });
+    assert.deepEqual([invented.problem, invented.emailProblem, invented.startLocal], ["", "This email isn't in the file", "2026-09-22T11:00"]);
+    assert.equal(missing.emailProblem, "No email address");
+    assert.equal(nameKey(" (Hyun) Young-Park "), "hyun young park");
   });
 
   it("flags a shift listed twice and honours an explicit year", () => {

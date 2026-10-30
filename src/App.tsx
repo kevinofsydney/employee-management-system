@@ -2,7 +2,7 @@ import { SignIn, SignUp, useAuth, useClerk } from "@clerk/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, download } from "./api";
 import { dateTime, displayName, fullName, hours, localInput, money, shiftTime } from "./format";
-import { checkEntries, eventFromFileName, rosterNote, scanRoster, workbookText, type RosterEntry, type RosterRow } from "./shared/roster";
+import { checkEntries, eventFromFileName, nameKey, rosterNote, scanRoster, workbookText, type RosterEntry, type RosterRow } from "./shared/roster";
 import { validateRange } from "./shared/time";
 import { readXlsx, type Sheet } from "./shared/xlsx";
 import type { Expense, Overview, Shift, User } from "./types";
@@ -187,22 +187,59 @@ function RosterPanel({ overview, call, act }: { overview: Overview; call: Caller
   </div>;
 }
 
-type ImportDraft = RosterRow & { include: boolean };
+/** `person` is the admin's explicit choice: "" to match by email, "new" for a new person, or a user ID. */
+type ImportDraft = RosterRow & { include: boolean; person: string };
 type ImportResult = { created: number; duplicates: number; peopleAdded: number; peopleActivated: number; skipped: { email: string; reason: string }[] };
-type ImportOutcome = { pill: string; tone: string; detail: string; ready: boolean };
+type ImportOutcome = { pill: string; tone: string; detail: string; ready: boolean; user: User | null; isNew: boolean };
 
-function importOutcome(draft: ImportDraft, overview: Overview): ImportOutcome {
-  if (draft.problem && !draft.fixable) return { pill: "Skipped", tone: "inactive", detail: draft.problem, ready: false };
-  let range: { startAt: string; endAt: string };
-  try { range = validateRange(draft.startLocal, draft.endLocal); }
-  catch (cause) { return { pill: "Needs times", tone: "pending", detail: draft.startLocal && draft.endLocal ? (cause as Error).message : `${draft.problem || "Times missing"}. Enter the start and end.`, ready: false }; }
-  const user = overview.users.find((person) => person.email.toLowerCase() === draft.email);
-  if (user?.role === "ADMIN") return { pill: "Skipped", tone: "inactive", detail: "This is an admin account.", ready: false };
-  if (user?.status === "INACTIVE") return { pill: "Skipped", tone: "inactive", detail: "Deactivated. Reactivate them under People first.", ready: false };
-  if (user && overview.shifts.some((shift) => shift.user_id === user.id && shift.start_at === range.startAt && shift.end_at === range.endAt)) return { pill: "Already rostered", tone: "rostered", detail: "", ready: false };
-  if (!user) return { pill: "New person", tone: "submitted", detail: "Added now; their shifts appear when they sign up with this email.", ready: true };
-  if (user.status === "PENDING") return { pill: "Ready", tone: "active", detail: "Their pending sign-up will be activated.", ready: true };
-  return { pill: "Ready", tone: "active", detail: "", ready: true };
+function importOutcomes(drafts: ImportDraft[], overview: Overview): ImportOutcome[] {
+  const byEmail = new Map(overview.users.map((user) => [user.email.toLowerCase(), user]));
+  const byId = new Map(overview.users.map((user) => [user.id, user]));
+  const first = drafts.map((draft): ImportOutcome & { identity: string } => {
+    const base = { user: null, isNew: false, identity: "" };
+    if (draft.problem && !draft.fixable) return { ...base, pill: "Skipped", tone: "inactive", detail: draft.problem, ready: false };
+    const user = draft.person && draft.person !== "new" ? byId.get(draft.person) ?? null : draft.person === "new" || draft.emailProblem ? null : byEmail.get(draft.email) ?? null;
+    const isNew = !user && !draft.emailProblem;
+    const identity = user ? user.id : isNew ? `new:${draft.email}` : "";
+    let range: { startAt: string; endAt: string };
+    try { range = validateRange(draft.startLocal, draft.endLocal); }
+    catch (cause) { return { ...base, user, isNew, identity, pill: "Needs times", tone: "pending", detail: draft.startLocal && draft.endLocal ? (cause as Error).message : `${draft.problem || "Times missing"}. Enter the start and end.`, ready: false }; }
+    if (!user && !isNew) return { ...base, pill: "Choose person", tone: "pending", detail: `${draft.emailProblem}. Choose who this is, or untick the row.`, ready: false };
+    if (user?.role === "ADMIN") return { ...base, pill: "Skipped", tone: "inactive", detail: "This is an admin account.", ready: false };
+    if (user?.status === "INACTIVE") return { ...base, pill: "Skipped", tone: "inactive", detail: "Deactivated. Reactivate them under People first.", ready: false };
+    if (user && overview.shifts.some((shift) => shift.user_id === user.id && shift.start_at === range.startAt && shift.end_at === range.endAt)) return { ...base, user, identity, pill: "Already rostered", tone: "rostered", detail: "", ready: false };
+    if (isNew) return { user, isNew, identity, pill: "New person", tone: "submitted", detail: "Added now; their shifts appear when they sign up with this email.", ready: true };
+    return { user, isNew, identity, pill: "Ready", tone: "active", detail: user!.status === "PENDING" ? "Their pending sign-up will be activated." : "", ready: true };
+  });
+  // One name under two identities, or one email under two names, usually means a typo or an AI mix-up.
+  // Those rows wait until the admin picks the person on each of them, or unticks one.
+  const identitiesByName = new Map<string, Set<string>>();
+  const namesByEmail = new Map<string, Set<string>>();
+  drafts.forEach((draft, index) => {
+    const { identity } = first[index];
+    if (!draft.include || !identity) return;
+    identitiesByName.set(nameKey(draft.name), (identitiesByName.get(nameKey(draft.name)) ?? new Set()).add(identity));
+    if (draft.email) namesByEmail.set(draft.email, (namesByEmail.get(draft.email) ?? new Set()).add(nameKey(draft.name)));
+  });
+  return first.map(({ identity, ...outcome }, index) => {
+    const draft = drafts[index];
+    if (!draft.include || !outcome.ready || draft.person) return outcome;
+    if ((identitiesByName.get(nameKey(draft.name))?.size ?? 0) > 1) return { ...outcome, pill: "Check person", tone: "pending", detail: `${draft.name} also appears with a different email. Choose who each row is.`, ready: false };
+    if (draft.email && (namesByEmail.get(draft.email)?.size ?? 0) > 1) return { ...outcome, pill: "Check person", tone: "pending", detail: `${draft.email} is listed under more than one name. Choose who each row is.`, ready: false };
+    return outcome;
+  });
+}
+
+function PersonPicker({ draft, outcome, overview, onChange }: { draft: ImportDraft; outcome: ImportOutcome; overview: Overview; onChange: (person: string) => void }) {
+  const people = overview.users.filter((user) => user.role === "TRANSLATOR" && user.status !== "INACTIVE").sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const canBeNew = !draft.emailProblem && !overview.users.some((user) => user.email.toLowerCase() === draft.email);
+  // Rows waiting on a decision show an empty choice, so picking even the suggested person confirms it.
+  const value = draft.person || (outcome.pill === "Choose person" || outcome.pill === "Check person" ? "" : outcome.user?.id ?? (outcome.isNew ? "new" : ""));
+  return <select className="import-person" aria-label={`Person for ${draft.name}`} value={value} disabled={draft.problem !== "" && !draft.fixable} onChange={(e) => onChange(e.target.value)}>
+    {value === "" && <option value="">Choose who this is…</option>}
+    {canBeNew && <option value="new">New person · {draft.email}</option>}
+    {people.map((user) => <option key={user.id} value={user.id}>{fullName(user)} · {user.email}</option>)}
+  </select>;
 }
 
 function RosterImport({ overview, call, act }: { overview: Overview; call: Caller; act: (job: () => Promise<unknown>, success?: string) => Promise<boolean> }) {
@@ -218,9 +255,9 @@ function RosterImport({ overview, call, act }: { overview: Overview; call: Calle
   const [busy, setBusy] = useState("");
   const thisYear = new Date().getFullYear();
   const options = (value: string) => (value ? { year: Number(value) } : {});
-  const show = (rows: RosterRow[]) => setDrafts(rows.map((row) => ({ ...row, include: !row.problem })));
-  const outcomes = drafts.map((draft) => importOutcome(draft, overview));
-  const chosen = drafts.filter((draft, index) => draft.include && outcomes[index].ready);
+  const show = (rows: RosterRow[]) => setDrafts(rows.map((row) => ({ ...row, include: !row.problem || row.fixable, person: "" })));
+  const outcomes = importOutcomes(drafts, overview);
+  const chosen = drafts.flatMap((draft, index) => (draft.include && outcomes[index].ready ? [{ draft, user: outcomes[index].user }] : []));
 
   function reset() { setFileKey((n) => n + 1); setFileName(""); setSheets(null); setAiEntries(null); setDrafts([]); setFound({ used: [], skipped: [] }); setError(""); }
   async function choose(file: File | undefined) {
@@ -251,7 +288,7 @@ function RosterImport({ overview, call, act }: { overview: Overview; call: Calle
   async function submit() {
     setBusy("import"); setError("");
     try {
-      const result = await call<ImportResult>("/api/admin/roster-import", { method: "POST", body: JSON.stringify({ shifts: chosen.map((draft) => ({ email: draft.email, name: draft.name, startLocal: draft.startLocal, endLocal: draft.endLocal, note: rosterNote(event, draft) })) }) });
+      const result = await call<ImportResult>("/api/admin/roster-import", { method: "POST", body: JSON.stringify({ shifts: chosen.map(({ draft, user }) => ({ ...(user ? { userId: user.id } : { email: draft.email }), name: draft.name, startLocal: draft.startLocal, endLocal: draft.endLocal, note: rosterNote(event, draft) })) }) });
       const parts = [`Imported ${result.created} shift${result.created === 1 ? "" : "s"}.`];
       if (result.peopleAdded) parts.push(`Added ${result.peopleAdded} new ${result.peopleAdded === 1 ? "person" : "people"}; their shifts appear when they sign up with the same email.`);
       if (result.peopleActivated) parts.push(`Activated ${result.peopleActivated} pending sign-up${result.peopleActivated === 1 ? "" : "s"}.`);
@@ -273,8 +310,8 @@ function RosterImport({ overview, call, act }: { overview: Overview; call: Calle
       {drafts.length > 0 && <div className="import-rows">{drafts.map((draft, index) => {
         const outcome = outcomes[index];
         return <article className="import-row" key={`${aiEntries ? "ai" : "file"}-${index}`}>
-          <input type="checkbox" aria-label={`Import ${draft.name || draft.email}`} checked={draft.include && outcome.ready} disabled={!outcome.ready} onChange={(e) => update(index, { include: e.target.checked })} />
-          <div className="import-who"><strong>{draft.name || "No name"}</strong><p className="muted">{draft.email || "No email"} · {rosterNote(event, draft) || draft.sheet}</p>{outcome.detail && <p className="helper">{outcome.detail}</p>}</div>
+          <input type="checkbox" aria-label={`Import ${draft.name || draft.email}`} checked={draft.include} disabled={draft.problem !== "" && !draft.fixable} onChange={(e) => update(index, { include: e.target.checked })} />
+          <div className="import-who"><strong>{draft.name || "No name"}</strong><p className="muted">{draft.email || "No email"} · {rosterNote(event, draft) || draft.sheet}</p>{outcome.detail && <p className="helper">{outcome.detail}</p>}<PersonPicker draft={draft} outcome={outcome} overview={overview} onChange={(person) => update(index, { person, include: true })} /></div>
           <div className="import-times"><input type="datetime-local" step="900" aria-label="Start" value={draft.startLocal} disabled={draft.problem !== "" && !draft.fixable} onChange={(e) => update(index, { startLocal: e.target.value, include: true })} /><input type="datetime-local" step="900" aria-label="End" value={draft.endLocal} disabled={draft.problem !== "" && !draft.fixable} onChange={(e) => update(index, { endLocal: e.target.value, include: true })} /></div>
           <span className={`status ${outcome.tone}`}>{outcome.pill}</span>
         </article>;

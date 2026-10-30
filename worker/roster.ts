@@ -21,17 +21,28 @@ export async function importRoster(request: Request, env: Env, actor: User): Pro
   const rows = body.shifts.map((item, index) => {
     if (!item || typeof item !== "object") throw new HttpError(400, `Row ${index + 1} is invalid.`);
     const row = item as Record<string, unknown>;
-    const email = string(row.email, `Row ${index + 1} email`, 254).toLowerCase();
-    if (!EMAIL.test(email)) throw new HttpError(400, `Row ${index + 1} has an invalid email address.`);
+    // Each row names an existing person by userId (the admin's choice in the preview) or gives an email,
+    // which matches someone already here or adds a new person.
+    const userId = row.userId === undefined ? "" : string(row.userId, `Row ${index + 1} person`, 80);
+    const email = userId ? "" : string(row.email, `Row ${index + 1} email`, 254).toLowerCase();
+    if (!userId && !EMAIL.test(email)) throw new HttpError(400, `Row ${index + 1} has an invalid email address.`);
     try {
-      return { email, name: string(row.name, "Name", 80), note: string(row.note ?? "", "Note", 300, false), ...range(row) };
+      return { userId, email, name: string(row.name, "Name", 80), note: string(row.note ?? "", "Note", 300, false), ...range(row) };
     } catch (error) {
-      throw new HttpError(400, `Row ${index + 1} (${email}): ${(error as Error).message}`);
+      throw new HttpError(400, `Row ${index + 1} (${email || "chosen person"}): ${(error as Error).message}`);
     }
   });
 
   const admins = new Set((env.ADMIN_EMAILS ?? "").split(",").map((part) => part.trim().toLowerCase()).filter(Boolean));
-  const users = new Map((await env.DB.prepare("SELECT * FROM users").all<User>()).results.map((user) => [user.email.toLowerCase(), user]));
+  const everyone = (await env.DB.prepare("SELECT * FROM users").all<User>()).results;
+  const users = new Map(everyone.map((user) => [user.email.toLowerCase(), user]));
+  const usersById = new Map(everyone.map((user) => [user.id, user]));
+  for (const [index, row] of rows.entries()) {
+    if (!row.userId) continue;
+    const chosen = usersById.get(row.userId);
+    if (!chosen) throw new HttpError(400, `Row ${index + 1}: the chosen person no longer exists. Reload and try again.`);
+    row.email = chosen.email.toLowerCase();
+  }
   const existing = new Set((await env.DB.prepare("SELECT user_id, start_at, end_at FROM shifts").all<{ user_id: string; start_at: string; end_at: string }>()).results
     .map((shift) => `${shift.user_id}|${shift.start_at}|${shift.end_at}`));
 
