@@ -56,6 +56,14 @@ If you develop on Windows in a restricted sandbox, set `XDG_CONFIG_HOME` to a wr
 
 Do not run the remote migration against an existing database without checking whether it contains live data. This repository had no local `.env` or Prisma migrations when rebuilt; no existing remote database was changed.
 
+## Deploying changes
+
+The live app runs at `https://timesheets.courant.live`. Cloudflare Workers Builds is connected to this repository, so every push to `main` runs `npm run build`, applies any new D1 migrations with `npx wrangler d1 migrations apply translator-roster --remote`, and runs `npx wrangler deploy`. The production `VITE_CLERK_PUBLISHABLE_KEY` is set as a build variable there; build logs are under the Worker's Settings → Build in the Cloudflare dashboard.
+
+Test changes locally with `npm run dev` before merging. Preview builds are off on purpose: a preview would share the production database and secrets, and Clerk production only accepts `courant.live` origins.
+
+To deploy by hand instead, pass the production key in the shell so it overrides the development key in `.env`: `VITE_CLERK_PUBLISHABLE_KEY=pk_live_… npm run deploy`. `npx wrangler rollback` restores the previous Worker version but does not undo migrations.
+
 ## MYOB exports
 
 The **MYOB timesheets** download follows MYOB Business's documented timesheet import shape: a first row containing `{}`, a tab-separated header, employee name and card ID, payroll category, date, and decimal hours. Standard and Sunday parts of an overnight shift become separate entries. Match the two category names in the admin Export tab to your MYOB pay items. See [MYOB importing timesheets](https://www.myob.com/au/support/myob-business/import-export/importing-data/importing-timesheets).
