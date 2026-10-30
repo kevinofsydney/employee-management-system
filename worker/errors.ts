@@ -27,7 +27,7 @@ const LIMITS = { path: 300, code: 120, message: 1000, stack: 4000, email: 200 };
 // Tokens, bearer headers and obviously secret-looking values are stripped before storage.
 const REDACTIONS: [RegExp, string][] = [
   // Key/value forms go first so "Authorization: Bearer x" is replaced as a whole.
-  [/(CLERK_SECRET_KEY|CLERK_JWT_KEY|ADMIN_EMAILS|Authorization)(["']?\s*[:=]\s*["']?)[^"'\r\n]+/gi, "$1$2[redacted]"],
+  [/(CLERK_SECRET_KEY|CLERK_JWT_KEY|DEEPSEEK_API_KEY|ADMIN_EMAILS|Authorization)(["']?\s*[:=]\s*["']?)[^"'\r\n]+/gi, "$1$2[redacted]"],
   [/(Bearer\s+)[A-Za-z0-9._\-]+/gi, "$1[redacted]"],
   [/\b(sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, "[redacted-key]"],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g, "[redacted-jwt]"]

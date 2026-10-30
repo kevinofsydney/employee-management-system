@@ -1,5 +1,5 @@
 export type User = {
-  id: string; email: string; legal_first_name: string; surname: string; nickname: string;
+  id: string; clerk_id?: string | null; email: string; legal_first_name: string; surname: string; nickname: string;
   role: "ADMIN" | "TRANSLATOR"; status: "PENDING" | "ACTIVE" | "INACTIVE"; myob_card_id: string;
 };
 export type Expense = { id: string; timesheet_id: string; incurred_on: string; description: string; amount_cents: number; receipt_sent: number };
@@ -9,4 +9,6 @@ export type Overview = {
   users: User[]; shifts: Shift[];
   totals: Record<string, { standard: number; sunday: number; total: number }>;
   settings: Record<string, string>;
+  /** Whether the beta AI roster reader is configured. */
+  aiImport?: boolean;
 };

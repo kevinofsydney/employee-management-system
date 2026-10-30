@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { useCallback, useState } from "react";
 import { AdminDashboard, TranslatorDashboard } from "./App";
 import { buildExport, exportFileInfo, isExportKind } from "./shared/export";
+import { splitName } from "./shared/roster";
 import { ZONE, isMissing, localToUtc, shiftWeek, validateRange } from "./shared/time";
 import type { Overview, Shift, Timesheet, User } from "./types";
 
@@ -265,6 +266,31 @@ export default function Demo() {
         shifts = [...shifts, { id: id(`shift-${++counter}`), user_id: owner.id, user: owner, start_at: startAt, end_at: endAt, note: String(body.note ?? ""), missing: false, timesheet: null }];
         done("Shift added in this preview.");
         return { ok: true } as T;
+      }
+      if (method === "POST" && path === "/api/admin/roster-import") {
+        const result = { created: 0, duplicates: 0, peopleAdded: 0, peopleActivated: 0, skipped: [] as { email: string; reason: string }[] };
+        for (const row of (body.shifts ?? []) as { email: string; name: string; startLocal: string; endLocal: string; note: string }[]) {
+          const email = row.email.toLowerCase();
+          let owner = users.find((item) => item.email.toLowerCase() === email);
+          if (owner?.role === "ADMIN") { result.skipped.push({ email, reason: "is an admin account" }); continue; }
+          if (owner?.status === "INACTIVE") { result.skipped.push({ email, reason: "is deactivated. Reactivate them under People first" }); continue; }
+          if (!owner) {
+            const { first, surname } = splitName(row.name);
+            owner = { id: id(`user-${++counter}`), clerk_id: null, email, legal_first_name: first, surname, nickname: "", role: "TRANSLATOR", status: "ACTIVE", myob_card_id: "" };
+            users = [...users, owner];
+            result.peopleAdded += 1;
+          } else if (owner.status === "PENDING") {
+            owner = { ...owner, status: "ACTIVE" };
+            users = users.map((item) => (item.id === owner!.id ? owner! : item));
+            result.peopleActivated += 1;
+          }
+          const { startAt, endAt } = validateRange(row.startLocal, row.endLocal);
+          if (shifts.some((item) => item.user_id === owner!.id && item.start_at === startAt && item.end_at === endAt)) { result.duplicates += 1; continue; }
+          shifts = [...shifts, { id: id(`shift-${++counter}`), user_id: owner.id, user: owner, start_at: startAt, end_at: endAt, note: row.note, missing: false, timesheet: null }];
+          result.created += 1;
+        }
+        done("Roster imported in this preview.");
+        return result as T;
       }
       const shiftPath = /^\/api\/admin\/shifts\/([^/]+)$/.exec(path);
       if (shiftPath && method === "PATCH") {

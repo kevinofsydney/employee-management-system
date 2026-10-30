@@ -64,6 +64,19 @@ Test changes locally with `npm run dev` before merging. Preview builds are off o
 
 To deploy by hand instead, pass the production key in the shell so it overrides the development key in `.env`: `VITE_CLERK_PUBLISHABLE_KEY=pk_live_… npm run deploy`. `npx wrangler rollback` restores the previous Worker version but does not undo migrations.
 
+## Importing a roster
+
+Admins can import a tour roster from Excel under **Roster → Import a roster**. The workbook is read in the browser; only the confirmed shifts are sent to the server.
+
+- Any table with **Name** and **Email** header cells is read, along with optional **Role** and **Status** columns. Every other column whose header is a date (`SEP 22 SHOW`, `22/9`, `Mon 22nd September`, or a real date cell) is a show day, and each filled cell in it (`11:00 - 2330`, `9am - 5pm`, `22:00 - 2:00`) becomes a shift. An end time before the start runs past midnight. A bare `9-5` means 9am to 5pm.
+- The single-cell row above a table, such as a merged `MELBOURNE` banner, names the city. The shift note becomes `Event · City · Role`. The event name defaults to the file name without words like "interpreter sheet".
+- Sheets without such a table are ignored, which covers pay and profit summaries and copies without emails. Rows whose Status isn't "Confirmed" are skipped.
+- Dates without a year use the year that puts them nearest today. Pick a year in the preview to override it. Times are read as Sydney time.
+- The preview shows every row. The admin can untick rows, correct times, or enter times the reader couldn't understand before importing.
+- People are matched by email. Someone new is added straight away as an active translator with no sign-in (`users.clerk_id` is null). When they sign up with that email, their account takes over that row and its shifts. A pending sign-up who is rostered is activated. Admin and deactivated accounts are skipped. Shifts already on the roster are skipped, so importing the same file twice is safe.
+
+**Read with AI (beta).** If `DEEPSEEK_API_KEY` is set as a Worker secret, the preview offers a button that sends a plain-text copy of every sheet, including names and email addresses, to DeepSeek and shows the rows it returns, through the same checks and editable preview. Nothing is sent unless an admin clicks it and confirms. Set the key with `npx wrangler secret put DEEPSEEK_API_KEY`, ideally one with a low spending cap. `DEEPSEEK_MODEL` overrides the default `deepseek-chat`. Remove the secret to turn the feature off.
+
 ## MYOB exports
 
 The **MYOB timesheets** download follows MYOB Business's documented timesheet import shape: a first row containing `{}`, a tab-separated header, employee name and card ID, payroll category, date, and decimal hours. Standard and Sunday parts of an overnight shift become separate entries. Match the two category names in the admin Export tab to your MYOB pay items. See [MYOB importing timesheets](https://www.myob.com/au/support/myob-business/import-export/importing-data/importing-timesheets).

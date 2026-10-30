@@ -2,6 +2,9 @@ import { SignIn, SignUp, useAuth, useClerk } from "@clerk/react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, download } from "./api";
 import { dateTime, displayName, fullName, hours, localInput, money, shiftTime } from "./format";
+import { checkEntries, eventFromFileName, rosterNote, scanRoster, workbookText, type RosterEntry, type RosterRow } from "./shared/roster";
+import { validateRange } from "./shared/time";
+import { readXlsx, type Sheet } from "./shared/xlsx";
 import type { Expense, Overview, Shift, User } from "./types";
 
 type Caller = <T>(path: string, options?: RequestInit) => Promise<T>;
@@ -171,7 +174,7 @@ function RosterPanel({ overview, call, act }: { overview: Overview; call: Caller
   const [editing, setEditing] = useState<string | null>(null);
   function edit(shift: Shift) { setEditing(shift.id); setUserId(shift.user_id); setStart(localInput(shift.start_at)); setEnd(localInput(shift.end_at)); setNote(shift.note); window.scrollTo({ top: 0, behavior: "smooth" }); }
   async function submit(event: FormEvent) { event.preventDefault(); const id = editing; const saved = await act(() => call(id ? `/api/admin/shifts/${id}` : "/api/admin/shifts", { method: id ? "PATCH" : "POST", body: JSON.stringify({ userId, startLocal, endLocal, note }) }), id ? "Shift updated." : "Shift added."); if (saved) { if (!id) { setStart(""); setEnd(""); setNote(""); } else setEditing(null); } }
-  return <div className="page-stack"><form className="card form-stack" onSubmit={(e) => void submit(e)}><div><h2>{editing ? "Edit shift" : "Add a shift"}</h2><p className="muted">Enter all dates and times in Sydney time. Overnight shifts are supported.</p></div>
+  return <div className="page-stack"><RosterImport overview={overview} call={call} act={act} /><form className="card form-stack" onSubmit={(e) => void submit(e)}><div><h2>{editing ? "Edit shift" : "Add a shift"}</h2><p className="muted">Enter all dates and times in Sydney time. Overnight shifts are supported.</p></div>
     <label>Translator<select value={userId} onChange={(e) => setUserId(e.target.value)} disabled={!!editing} required><option value="">Choose a translator</option>{people.map((person) => <option value={person.id} key={person.id}>{fullName(person)}</option>)}</select></label>
     <div className="form-grid"><label>Start<input type="datetime-local" step="900" value={startLocal} onChange={(e) => setStart(e.target.value)} required /></label><label>End<input type="datetime-local" step="900" value={endLocal} onChange={(e) => setEnd(e.target.value)} required /></label></div>
     <label>Note <span className="muted">(optional)</span><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Tour or meeting point" /></label>
@@ -182,6 +185,103 @@ function RosterPanel({ overview, call, act }: { overview: Overview; call: Caller
         <div className="roster-rows">{group.shifts.map((shift) => <article className="roster-row" key={shift.id}><div className="roster-row-time"><strong>{shiftTime(shift.start_at, shift.end_at)}</strong>{shift.note && <p className="muted">{shift.note}</p>}</div><Status value={shift.timesheet?.status ?? (shift.missing ? "MISSING" : "ROSTERED")} /><div className="actions"><Button secondary onClick={() => edit(shift)}>Edit</Button>{!shift.timesheet && <button className="text-button danger" onClick={() => { if (window.confirm("Delete this shift?")) void act(() => call(`/api/admin/shifts/${shift.id}`, { method: "DELETE" }), "Shift deleted."); }}>Delete</button>}</div></article>)}</div>
       </details>)}</div></section>
   </div>;
+}
+
+type ImportDraft = RosterRow & { include: boolean };
+type ImportResult = { created: number; duplicates: number; peopleAdded: number; peopleActivated: number; skipped: { email: string; reason: string }[] };
+type ImportOutcome = { pill: string; tone: string; detail: string; ready: boolean };
+
+function importOutcome(draft: ImportDraft, overview: Overview): ImportOutcome {
+  if (draft.problem && !draft.fixable) return { pill: "Skipped", tone: "inactive", detail: draft.problem, ready: false };
+  let range: { startAt: string; endAt: string };
+  try { range = validateRange(draft.startLocal, draft.endLocal); }
+  catch (cause) { return { pill: "Needs times", tone: "pending", detail: draft.startLocal && draft.endLocal ? (cause as Error).message : `${draft.problem || "Times missing"}. Enter the start and end.`, ready: false }; }
+  const user = overview.users.find((person) => person.email.toLowerCase() === draft.email);
+  if (user?.role === "ADMIN") return { pill: "Skipped", tone: "inactive", detail: "This is an admin account.", ready: false };
+  if (user?.status === "INACTIVE") return { pill: "Skipped", tone: "inactive", detail: "Deactivated. Reactivate them under People first.", ready: false };
+  if (user && overview.shifts.some((shift) => shift.user_id === user.id && shift.start_at === range.startAt && shift.end_at === range.endAt)) return { pill: "Already rostered", tone: "rostered", detail: "", ready: false };
+  if (!user) return { pill: "New person", tone: "submitted", detail: "Added now; their shifts appear when they sign up with this email.", ready: true };
+  if (user.status === "PENDING") return { pill: "Ready", tone: "active", detail: "Their pending sign-up will be activated.", ready: true };
+  return { pill: "Ready", tone: "active", detail: "", ready: true };
+}
+
+function RosterImport({ overview, call, act }: { overview: Overview; call: Caller; act: (job: () => Promise<unknown>, success?: string) => Promise<boolean> }) {
+  const [fileKey, setFileKey] = useState(0);
+  const [fileName, setFileName] = useState("");
+  const [sheets, setSheets] = useState<Sheet[] | null>(null);
+  const [aiEntries, setAiEntries] = useState<RosterEntry[] | null>(null);
+  const [found, setFound] = useState({ used: [] as string[], skipped: [] as string[] });
+  const [drafts, setDrafts] = useState<ImportDraft[]>([]);
+  const [event, setEvent] = useState("");
+  const [year, setYear] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const thisYear = new Date().getFullYear();
+  const options = (value: string) => (value ? { year: Number(value) } : {});
+  const show = (rows: RosterRow[]) => setDrafts(rows.map((row) => ({ ...row, include: !row.problem })));
+  const outcomes = drafts.map((draft) => importOutcome(draft, overview));
+  const chosen = drafts.filter((draft, index) => draft.include && outcomes[index].ready);
+
+  function reset() { setFileKey((n) => n + 1); setFileName(""); setSheets(null); setAiEntries(null); setDrafts([]); setFound({ used: [], skipped: [] }); setError(""); }
+  async function choose(file: File | undefined) {
+    reset();
+    if (!file) return;
+    try {
+      const parsed = readXlsx(new Uint8Array(await file.arrayBuffer()));
+      const scan = scanRoster(parsed, options(year));
+      setFileName(file.name); setSheets(parsed); setEvent(eventFromFileName(file.name)); setFound({ used: scan.sheetsUsed, skipped: scan.sheetsSkipped }); show(scan.rows);
+    } catch (cause) { setError((cause as Error).message); }
+  }
+  function changeYear(value: string) {
+    setYear(value);
+    if (aiEntries) show(checkEntries(aiEntries, options(value)));
+    else if (sheets) show(scanRoster(sheets, options(value)).rows);
+  }
+  async function readWithAi() {
+    if (!sheets || !window.confirm("This sends the text of every sheet in this file, including names and email addresses, to DeepSeek to read. Continue?")) return;
+    setBusy("ai"); setError("");
+    try {
+      const result = await call<{ entries: RosterEntry[] }>("/api/admin/roster-ai", { method: "POST", body: JSON.stringify({ fileName, text: workbookText(sheets) }) });
+      setAiEntries(result.entries); show(checkEntries(result.entries, options(year)));
+      if (!result.entries.length) setError("The AI reader didn't find any shifts in this file.");
+    } catch (cause) { setError((cause as Error).message); }
+    finally { setBusy(""); }
+  }
+  function update(index: number, patch: Partial<ImportDraft>) { setDrafts((old) => old.map((draft, i) => (i === index ? { ...draft, ...patch } : draft))); }
+  async function submit() {
+    setBusy("import"); setError("");
+    try {
+      const result = await call<ImportResult>("/api/admin/roster-import", { method: "POST", body: JSON.stringify({ shifts: chosen.map((draft) => ({ email: draft.email, name: draft.name, startLocal: draft.startLocal, endLocal: draft.endLocal, note: rosterNote(event, draft) })) }) });
+      const parts = [`Imported ${result.created} shift${result.created === 1 ? "" : "s"}.`];
+      if (result.peopleAdded) parts.push(`Added ${result.peopleAdded} new ${result.peopleAdded === 1 ? "person" : "people"}; their shifts appear when they sign up with the same email.`);
+      if (result.peopleActivated) parts.push(`Activated ${result.peopleActivated} pending sign-up${result.peopleActivated === 1 ? "" : "s"}.`);
+      if (result.duplicates) parts.push(`${result.duplicates} already on the roster.`);
+      if (result.skipped.length) parts.push(`Skipped: ${result.skipped.map((skip) => `${skip.email} ${skip.reason}`).join("; ")}.`);
+      reset();
+      await act(async () => undefined, parts.join(" "));
+    } catch (cause) { setError((cause as Error).message); }
+    finally { setBusy(""); }
+  }
+
+  return <section className="card form-stack"><div><h2>Import a roster</h2><p className="muted">Choose the tour’s Excel file (.xlsx). Tables with Name and Email columns and a column per show date are read; pay summaries and other sheets are ignored. The file stays on this computer. Check the shifts below before importing.</p></div>
+    <label>Roster file<input key={fileKey} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(e) => void choose(e.target.files?.[0])} /></label>
+    {error && <Notice tone="error">{error}</Notice>}
+    {sheets && <>
+      <div className="form-grid"><label>Event name<input value={event} maxLength={80} onChange={(e) => setEvent(e.target.value)} placeholder="e.g. MAMAMOO" /></label><label>Year<select value={year} onChange={(e) => changeYear(e.target.value)}><option value="">Work it out from today</option>{[thisYear - 1, thisYear, thisYear + 1].map((y) => <option key={y} value={y}>{y}</option>)}</select></label></div>
+      <p className="helper">{aiEntries ? "Read by the AI reader (beta). Check every row." : found.used.length ? `Read ${found.used.join(", ")}.${found.skipped.length ? ` Ignored ${found.skipped.join(", ")}.` : ""}` : "No roster table found: no sheet has Name and Email columns with show dates."} Times are Sydney time.</p>
+      {overview.aiImport && <div className="import-ai"><Button type="button" secondary disabled={busy !== ""} onClick={() => void readWithAi()}>{busy === "ai" ? "Reading…" : "Read with AI (beta)"}</Button><span className="helper">For layouts the built-in reader gets wrong. Sends the file’s text to DeepSeek.</span></div>}
+      {drafts.length > 0 && <div className="import-rows">{drafts.map((draft, index) => {
+        const outcome = outcomes[index];
+        return <article className="import-row" key={`${aiEntries ? "ai" : "file"}-${index}`}>
+          <input type="checkbox" aria-label={`Import ${draft.name || draft.email}`} checked={draft.include && outcome.ready} disabled={!outcome.ready} onChange={(e) => update(index, { include: e.target.checked })} />
+          <div className="import-who"><strong>{draft.name || "No name"}</strong><p className="muted">{draft.email || "No email"} · {rosterNote(event, draft) || draft.sheet}</p>{outcome.detail && <p className="helper">{outcome.detail}</p>}</div>
+          <div className="import-times"><input type="datetime-local" step="900" aria-label="Start" value={draft.startLocal} disabled={draft.problem !== "" && !draft.fixable} onChange={(e) => update(index, { startLocal: e.target.value, include: true })} /><input type="datetime-local" step="900" aria-label="End" value={draft.endLocal} disabled={draft.problem !== "" && !draft.fixable} onChange={(e) => update(index, { endLocal: e.target.value, include: true })} /></div>
+          <span className={`status ${outcome.tone}`}>{outcome.pill}</span>
+        </article>;
+      })}</div>}
+      <div className="actions"><Button type="button" disabled={!chosen.length || busy !== ""} onClick={() => void submit()}>{busy === "import" ? "Importing…" : `Import ${chosen.length} shift${chosen.length === 1 ? "" : "s"}`}</Button><Button type="button" secondary onClick={reset}>Cancel</Button></div>
+    </>}
+  </section>;
 }
 
 function PeoplePanel({ overview, call, act }: { overview: Overview; call: Caller; act: (job: () => Promise<unknown>, success?: string) => Promise<boolean> }) {
@@ -195,7 +295,7 @@ function PersonCard({ user, call, act }: { user: User; call: Caller; act: (job: 
   const [nickname, setNickname] = useState(user.nickname);
   const [card, setCard] = useState(user.myob_card_id);
   async function save(status = user.status) { await act(() => call(`/api/admin/users/${user.id}`, { method: "PATCH", body: JSON.stringify({ legalFirstName: first, surname, nickname, myobCardId: card, status }) }), status === "ACTIVE" && user.status !== "ACTIVE" ? "Translator activated." : "Translator updated."); }
-  return <article className="card form-stack"><div className="shift-main"><div><strong>{fullName(user)}</strong><p className="muted">{user.email}</p></div><Status value={user.status} /></div>
+  return <article className="card form-stack"><div className="shift-main"><div><strong>{fullName(user)}</strong><p className="muted">{user.email}{user.clerk_id === null ? " · added from a roster, not signed up yet" : ""}</p></div><Status value={user.status} /></div>
     <div className="form-grid"><label>Legal first name<input value={first} onChange={(e) => setFirst(e.target.value)} maxLength={20} /></label><label>Surname<input value={surname} onChange={(e) => setSurname(e.target.value)} maxLength={30} /></label><label>Nickname<input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={80} /></label><label>MYOB card ID<input value={card} onChange={(e) => setCard(e.target.value)} maxLength={15} placeholder="From MYOB employee record" /></label></div>
     <div className="actions"><Button secondary onClick={() => void save()}>Save details</Button>{user.status !== "ACTIVE" && <Button onClick={() => void save("ACTIVE")}>Activate</Button>}{user.status === "ACTIVE" && <Button secondary onClick={() => void save("INACTIVE")}>Deactivate</Button>}</div>
   </article>;

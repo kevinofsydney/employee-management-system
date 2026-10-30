@@ -51,7 +51,7 @@ export async function currentUser(request: Request, env: Env): Promise<User> {
     throw new HttpError(401, "Your session has expired. Sign in again.");
   }
 
-  const existing = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(clerkId).first<User>();
+  const existing = await env.DB.prepare("SELECT * FROM users WHERE clerk_id = ?").bind(clerkId).first<User>();
   if (existing) {
     if (existing.role === "ADMIN") {
       const identity = await clerkUser(env, clerkId);
@@ -65,9 +65,15 @@ export async function currentUser(request: Request, env: Env): Promise<User> {
   const admins = (env.ADMIN_EMAILS ?? "").split(",").map((part) => part.trim().toLowerCase()).filter(Boolean);
   const admin = admins.includes(identity.email);
   const now = new Date().toISOString();
-  await env.DB.prepare("INSERT OR IGNORE INTO users (id, email, legal_first_name, surname, nickname, role, status, myob_card_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)")
-    .bind(clerkId, identity.email, identity.first, identity.last, "", admin ? "ADMIN" : "TRANSLATOR", admin ? "ACTIVE" : "PENDING", now, now).run();
-  const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(clerkId).first<User>();
+  // A roster import may already have added this person. Their verified email claims that row, its
+  // shifts and its activation, since an admin vetted them by rostering them.
+  if (!admin) {
+    await env.DB.prepare("UPDATE users SET clerk_id = ?, updated_at = ? WHERE email = ? AND clerk_id IS NULL AND role = 'TRANSLATOR'")
+      .bind(clerkId, now, identity.email).run();
+  }
+  await env.DB.prepare("INSERT OR IGNORE INTO users (id, clerk_id, email, legal_first_name, surname, nickname, role, status, myob_card_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)")
+    .bind(clerkId, clerkId, identity.email, identity.first, identity.last, "", admin ? "ADMIN" : "TRANSLATOR", admin ? "ACTIVE" : "PENDING", now, now).run();
+  const user = await env.DB.prepare("SELECT * FROM users WHERE clerk_id = ?").bind(clerkId).first<User>();
   if (!user) throw new HttpError(409, "This email is already registered to another account.");
   return user;
 }

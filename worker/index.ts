@@ -5,6 +5,8 @@ import { currentUser, HttpError, requireActive, requireAdmin } from "./auth";
 import { audit, shiftViews } from "./data";
 import { logFailure, pruneErrorLogs } from "./errors";
 import { exportFile } from "./export";
+import { importRoster } from "./roster";
+import { readRosterWithAi } from "./roster-ai";
 import type { Env, Expense, Shift, Timesheet, User } from "./types";
 import { bodyObject, expenses, range, string } from "./validation";
 
@@ -77,7 +79,7 @@ async function adminOverview(env: Env): Promise<Response> {
     current.total += hours.standard + hours.sunday;
     totals[shift.user_id] = current;
   }
-  return reply({ users: users.results, shifts, totals, settings: Object.fromEntries(settings.results.map((row) => [row.key, row.value])) });
+  return reply({ users: users.results, shifts, totals, settings: Object.fromEntries(settings.results.map((row) => [row.key, row.value])), aiImport: Boolean(env.DEEPSEEK_API_KEY) });
 }
 
 async function adminUser(request: Request, env: Env, actor: User, id: string): Promise<Response> {
@@ -221,6 +223,8 @@ async function handle(request: Request, env: Env, context: { user?: User }): Pro
   const userMatch = /^\/api\/admin\/users\/([^/]+)$/.exec(path);
   if (userMatch && request.method === "PATCH") return adminUser(request, env, user, userMatch[1]);
   if (path === "/api/admin/shifts" && request.method === "POST") return adminShift(request, env, user);
+  if (path === "/api/admin/roster-import" && request.method === "POST") return importRoster(request, env, user);
+  if (path === "/api/admin/roster-ai" && request.method === "POST") return readRosterWithAi(request, env, user);
   const shiftMatch = /^\/api\/admin\/shifts\/([^/]+)$/.exec(path);
   if (shiftMatch && ["PATCH", "DELETE"].includes(request.method)) return adminShift(request, env, user, shiftMatch[1]);
   const sheetMatch = /^\/api\/admin\/timesheets\/([^/]+)$/.exec(path);

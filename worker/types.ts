@@ -8,10 +8,16 @@ export interface Env {
   APP_URL: string;
   /** Days of error_logs history to keep. Defaults to 90 when unset or invalid. */
   ERROR_LOG_RETENTION_DAYS?: string;
+  /** Optional. Enables the beta "Read with AI" roster import. */
+  DEEPSEEK_API_KEY?: string;
+  /** Optional DeepSeek model name. Defaults to deepseek-chat. */
+  DEEPSEEK_MODEL?: string;
 }
 
 export type User = {
   id: string;
+  /** Null until a person added by a roster import signs up. */
+  clerk_id: string | null;
   email: string;
   legal_first_name: string;
   surname: string;

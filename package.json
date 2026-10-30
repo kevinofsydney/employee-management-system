@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.17.8",
+    "fflate": "^0.8.3",
     "jose": "^6.2.12",
     "luxon": "^3.7.0",
     "react": "^19.0.0",
